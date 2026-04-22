@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Optimize Condition="'$(Configuration)'=='Release'">true</Optimize>
+
+    <!-- Package metadata -->
+    <PackageId>Manifold.Core</PackageId>
+    <Version>0.1.0-alpha</Version>
+    <Authors>Matthew Makary</Authors>
+    <Description>Engine-agnostic C# Steamworks SDK library. No Godot dependency — use standalone or pair with Manifold.Godot.</Description>
+    <PackageLicense>MIT</PackageLicense>
+    <RepositoryUrl>https://github.com/TheDevRatt/Manifold</RepositoryUrl>
+    <PackageTags>steam;steamworks;godot;multiplayer;networking</PackageTags>
+
+    <!-- Platform-conditional packing symbol for Steam callback struct layout -->
+    <!-- VALVE_CALLBACK_PACK_SMALL (Pack=4) on Linux/macOS                   -->
+    <!-- VALVE_CALLBACK_PACK_LARGE (Pack=8) on Windows                       -->
+    <DefineConstants Condition="$([MSBuild]::IsOSPlatform('Linux')) Or $([MSBuild]::IsOSPlatform('OSX'))">$(DefineConstants);MANIFOLD_PACK_SMALL</DefineConstants>
+    <DefineConstants Condition="$([MSBuild]::IsOSPlatform('Windows'))">$(DefineConstants);MANIFOLD_PACK_LARGE</DefineConstants>
+  </PropertyGroup>
+
+</Project>

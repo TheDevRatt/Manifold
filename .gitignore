@@ -1,0 +1,41 @@
+# Build output
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+nuget.config.local
+
+# Generated interop — tracked in repo but flagged for awareness
+# src/Manifold.Core/Interop/Generated/ is committed (generated output)
+
+# Native build artifacts
+tools/NativeValidator/build/
+tools/NativeValidator/*.o
+tools/NativeValidator/*.so
+tools/NativeValidator/*.dll
+
+# Rider / VS / VSCode
+.idea/
+.vscode/
+*.DotSettings.user
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Godot (sample project)
+samples/ManifoldSample/.godot/
+samples/ManifoldSample/bin/
+samples/ManifoldSample/obj/
+
+# dotnet tools
+.config/dotnet-tools.json.lock
+
+# SDK zip (large, not needed in repo — sdk folder is tracked)
+steamworks_sdk_164.zip
