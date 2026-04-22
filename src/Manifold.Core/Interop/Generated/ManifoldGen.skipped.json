@@ -1,0 +1,232 @@
+[
+  {
+    "Category": "StructField",
+    "Name": "servernetadr_t m_NetAdr",
+    "Reason": "Unsupported type"
+  },
+  {
+    "Category": "StructField",
+    "Name": "SteamInputActionEvent_t::AnalogAction_t analogAction",
+    "Reason": "Unsupported type"
+  },
+  {
+    "Category": "StructField",
+    "Name": "void (*)(SteamNetworkingMessage_t *) m_pfnFreeData",
+    "Reason": "Unsupported type"
+  },
+  {
+    "Category": "StructField",
+    "Name": "void (*)(SteamNetworkingMessage_t *) m_pfnRelease",
+    "Reason": "Unsupported type"
+  },
+  {
+    "Category": "StructField",
+    "Name": "SNetSocket_t m_hSocket",
+    "Reason": "Unsupported type"
+  },
+  {
+    "Category": "StructField",
+    "Name": "SNetListenSocket_t m_hListenSocket",
+    "Reason": "Unsupported type"
+  },
+  {
+    "Category": "StructField",
+    "Name": "ScreenshotHandle m_hLocal",
+    "Reason": "Unsupported type"
+  },
+  {
+    "Category": "StructField",
+    "Name": "SteamUGCDetails_t m_details",
+    "Reason": "Unsupported type"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamClient_SetLocalIPBinding",
+    "Reason": "Unsupported parameter type"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamClient_SetWarningMessageHook",
+    "Reason": "Unsupported parameter type"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamUser_TrackAppUsageEvent",
+    "Reason": "Unsupported parameter type"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamFriends_GetFriendsGroupIDByIndex",
+    "Reason": "Unsupported return type: FriendsGroupID_t"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamFriends_GetFriendsGroupName",
+    "Reason": "Unsupported parameter type"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamFriends_GetFriendsGroupMembersCount",
+    "Reason": "Unsupported parameter type"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamFriends_GetFriendsGroupMembersList",
+    "Reason": "Unsupported parameter type"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamUtils_SetWarningMessageHook",
+    "Reason": "Unsupported parameter type"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamMatchmakingServers_PingServer",
+    "Reason": "Unsupported return type: HServerQuery"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamMatchmakingServers_PlayerDetails",
+    "Reason": "Unsupported return type: HServerQuery"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamMatchmakingServers_ServerRules",
+    "Reason": "Unsupported return type: HServerQuery"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamMatchmakingServers_CancelServerQuery",
+    "Reason": "Unsupported parameter type"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamNetworkingSockets_CreateListenSocketIP",
+    "Reason": "Unsupported parameter type"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamNetworkingSockets_ConnectByIPAddress",
+    "Reason": "Unsupported parameter type"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamNetworkingSockets_ConnectP2P",
+    "Reason": "Unsupported parameter type"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamNetworkingSockets_FindRelayAuthTicketForServer",
+    "Reason": "Unsupported parameter type"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamNetworkingSockets_ConnectToHostedDedicatedServer",
+    "Reason": "Unsupported parameter type"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamNetworkingSockets_GetCertificateRequest",
+    "Reason": "Unsupported parameter type"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamNetworkingSockets_SetCertificate",
+    "Reason": "Unsupported parameter type"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamNetworkingUtils_GetLocalPingLocation",
+    "Reason": "Unsupported parameter type"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamNetworkingUtils_EstimatePingTimeBetweenTwoLocations",
+    "Reason": "Unsupported parameter type"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamNetworkingUtils_EstimatePingTimeFromLocalHost",
+    "Reason": "Unsupported parameter type"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamNetworkingUtils_ConvertPingLocationToString",
+    "Reason": "Unsupported parameter type"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamNetworkingUtils_ParsePingLocationString",
+    "Reason": "Unsupported parameter type"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamNetworkingUtils_SetDebugOutputFunction",
+    "Reason": "Unsupported parameter type"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamNetworkingUtils_GetRealIdentityForFakeIP",
+    "Reason": "Unsupported parameter type"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamNetworkingUtils_SetGlobalCallback_SteamNetConnectionStatusChanged",
+    "Reason": "Unsupported parameter type"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamNetworkingUtils_SetGlobalCallback_SteamNetAuthenticationStatusChanged",
+    "Reason": "Unsupported parameter type"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamNetworkingUtils_SetGlobalCallback_SteamRelayNetworkStatusChanged",
+    "Reason": "Unsupported parameter type"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamNetworkingUtils_SetGlobalCallback_FakeIPResult",
+    "Reason": "Unsupported parameter type"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamNetworkingUtils_SetGlobalCallback_MessagesSessionRequest",
+    "Reason": "Unsupported parameter type"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamNetworkingUtils_SetGlobalCallback_MessagesSessionFailed",
+    "Reason": "Unsupported parameter type"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamNetworkingUtils_SetConfigValue",
+    "Reason": "Unsupported parameter type"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamNetworkingUtils_SetConfigValueStruct",
+    "Reason": "Unsupported parameter type"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamNetworkingUtils_GetConfigValue",
+    "Reason": "Unsupported parameter type"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamNetworkingUtils_SteamNetworkingIPAddr_ToString",
+    "Reason": "Unsupported parameter type"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamNetworkingUtils_SteamNetworkingIPAddr_GetFakeIPType",
+    "Reason": "Unsupported parameter type"
+  },
+  {
+    "Category": "Method",
+    "Name": "SteamAPI_ISteamNetworkingUtils_SteamNetworkingIdentity_ToString",
+    "Reason": "Unsupported parameter type"
+  }
+]
