@@ -1,6 +1,6 @@
 # Manifold
 
-A C# Steamworks SDK library for Godot 4 that talks directly to Steam, with no middleman!
+A C# Steamworks SDK library for Godot 4 that talks directly to Steam, with no man in the middle!
 
 ```csharp
 var peer = new SteamMultiplayerPeer();
