@@ -1,3 +1,0 @@
-/home/devratt/Manifold/tools/SizeValidator/build/CMakeFiles/size_validator.dir
-/home/devratt/Manifold/tools/SizeValidator/build/CMakeFiles/edit_cache.dir
-/home/devratt/Manifold/tools/SizeValidator/build/CMakeFiles/rebuild_cache.dir

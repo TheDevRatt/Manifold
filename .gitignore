@@ -8,6 +8,9 @@ obj/
 # NuGet
 *.nupkg
 *.snupkg
+
+# CMake build directories
+tools/**/build/
 packages/
 nuget.config.local
 
