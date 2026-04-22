@@ -25,6 +25,10 @@ internal static partial class SteamNative
     [return: MarshalAs(UnmanagedType.U1)]
     internal static partial bool SteamAPI_Init();
 
+    [LibraryImport(LibName, EntryPoint = "SteamAPI_RunCallbacks")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    internal static partial void SteamAPI_RunCallbacks();
+
     [LibraryImport(LibName, EntryPoint = "SteamAPI_Shutdown")]
     [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
     internal static partial void SteamAPI_Shutdown();
