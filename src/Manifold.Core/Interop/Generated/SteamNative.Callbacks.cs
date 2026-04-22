@@ -327,11 +327,9 @@ internal unsafe struct GameConnectedChatJoin_t
     internal ulong m_steamIDUser;
 }
 
-#if MANIFOLD_PACK_SMALL
-[StructLayout(LayoutKind.Sequential, Pack = 4)]
-#else
-[StructLayout(LayoutKind.Sequential, Pack = 8)]
-#endif
+// GameConnectedChatLeave_t: CSteamID has alignment=1 due to Valve's packing,
+// so trailing padding is zero and struct size = 18. Force Pack=1 to match.
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
 internal unsafe struct GameConnectedChatLeave_t
 {
     internal const int k_iCallback = 340;
@@ -2336,14 +2334,14 @@ internal unsafe struct SteamRemotePlaySessionAvatarLoaded_t
 internal unsafe struct SteamNetworkingMessagesSessionRequest_t
 {
     internal const int k_iCallback = 1251;
-    internal IntPtr m_identityRemote;
+    internal SteamNetworkingIdentity m_identityRemote;
 }
 
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 internal unsafe struct SteamNetworkingMessagesSessionFailed_t
 {
     internal const int k_iCallback = 1252;
-    internal IntPtr m_info;
+    internal SteamNetConnectionInfo_t m_info;
 }
 
 #if MANIFOLD_PACK_SMALL
@@ -2355,7 +2353,7 @@ internal unsafe struct SteamNetConnectionStatusChangedCallback_t
 {
     internal const int k_iCallback = 1221;
     internal uint m_hConn;
-    internal IntPtr m_info;
+    internal SteamNetConnectionInfo_t m_info;
     internal int m_eOldState;
 }
 

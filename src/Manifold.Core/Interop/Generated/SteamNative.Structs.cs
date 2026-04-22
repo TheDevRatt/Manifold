@@ -304,10 +304,10 @@ internal unsafe struct SteamNetworkingIdentity
 #endif
 internal unsafe struct SteamNetConnectionInfo_t
 {
-    internal IntPtr m_identityRemote;
+    internal SteamNetworkingIdentity m_identityRemote;
     internal long m_nUserData;
     internal uint m_hListenSocket;
-    internal IntPtr m_addrRemote;
+    internal SteamNetworkingIPAddr m_addrRemote;
     internal ushort m__pad1;
     internal uint m_idPOPRemote;
     internal uint m_idPOPRelay;
