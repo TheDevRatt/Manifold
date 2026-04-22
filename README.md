@@ -1,6 +1,6 @@
 # Manifold
 
-A C# Steamworks SDK library for Godot 4 that talks directly to Steam — no GodotSteam, no Steamworks.NET in the middle.
+A C# Steamworks SDK library for Godot 4 that talks directly to Steam, with no middleman!
 
 ```csharp
 var peer = new SteamMultiplayerPeer();
@@ -13,9 +13,16 @@ Multiplayer.MultiplayerPeer = peer;
 
 ---
 
-## Why Manifold
+## Why Manifold?
 
-Most C# Steam integrations stack abstractions on top of abstractions — Steamworks.NET wraps the SDK in a C++ flat API layer, and the GodotSteam C# bindings wrap GodotSteam's GDExtension on top of that. Manifold goes straight to the native SDK via P/Invoke, which means one less layer to debug and no GDExtension binary to ship or update. The entire P/Invoke surface is auto-generated from the official `steam_api.json` file that ships with the SDK, so keeping up with SDK updates is a code-gen run rather than manual porting. Call results use real `async`/`await` with cancellation and timeout support instead of callback spaghetti. Struct packing is validated against the real SDK headers at build time, so layout bugs get caught before they corrupt your data in production.
+There are already great options in this space. Steamworks.NET is a solid general-purpose wrapper, and GodotSteam has a strong community behind it. Manifold fills a specific gap: a C# library that integrates naturally with Godot 4's multiplayer system, without depending on either of them.
+
+A few things that shaped how it was built:
+
+- **Direct P/Invoke.** No C++ extension sitting between your code and Steam. Fewer moving parts, fewer things to go wrong.
+- **Auto-generated bindings.** The entire P/Invoke surface is generated from the `steam_api.json` file that ships with the SDK. Keeping up with SDK updates is a codegen run, not a manual porting job.
+- **Real async/await.** Call results return proper `Task<T>` with cancellation and timeout support baked in.
+- **Struct layout validation.** Packing is verified against the real SDK headers at build time, so layout bugs get caught before they cause silent data corruption at runtime.
 
 ---
 
@@ -32,7 +39,9 @@ Most C# Steam integrations stack abstractions on top of abstractions — Steamwo
 
 - [Godot 4.3+](https://godotengine.org/) (.NET build)
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-- [Steamworks SDK 1.64](https://partner.steamgames.com/doc/sdk) — you supply the native binaries, Manifold supplies the bindings
+- [Steamworks SDK 1.64](https://partner.steamgames.com/doc/sdk)
+
+> **Note:** While we're pre-NuGet, you'll need to supply the native Steam libraries (`steam_api64.dll` / `libsteam_api.so`) manually. Once the NuGet package ships in Phase 3, they'll be bundled automatically.
 
 ---
 
@@ -50,22 +59,22 @@ Then add a project reference to `Manifold.Core` (and `Manifold.Godot` once it's 
 <ProjectReference Include="../Manifold/src/Manifold.Core/Manifold.Core.csproj" />
 ```
 
-Drop the Steamworks SDK native libraries (`steam_api64.dll` / `libsteam_api.so`) into your project's output directory. A NuGet release and proper setup guide will come in Phase 3.
+Drop the Steamworks SDK native libraries into your project's output directory. A NuGet release and proper setup guide will come in Phase 3.
 
 ---
 
 ## Roadmap
 
-### Phase 1 — Foundation ✅
+### Phase 1: Foundation ✅
 
-- [x] Source generator (ManifoldGen) — reads `steam_api.json`, emits full P/Invoke layer
-- [x] `SteamLifecycle` — init/shutdown, background callback pump, fatal error handling
-- [x] `CallbackDispatcher` — type-safe subscriptions with disposable tokens
-- [x] `CallResultAwaiter<T>` — async Steam call results with cancellation and timeout
-- [x] Native struct size validator — catches packing bugs against real SDK headers at build time
+- [x] Source generator (ManifoldGen): reads `steam_api.json`, emits full P/Invoke layer
+- [x] `SteamLifecycle`: init/shutdown, background callback pump, fatal error handling
+- [x] `CallbackDispatcher`: type-safe subscriptions with disposable tokens
+- [x] `CallResultAwaiter<T>`: async Steam call results with cancellation and timeout
+- [x] Native struct size validator: catches packing bugs against real SDK headers at build time
 - [x] 80 contract tests
 
-### Phase 2 — Godot Integration *(in progress)*
+### Phase 2: Godot Integration *(in progress)*
 
 - [ ] `SteamManager` autoload (init, shutdown, per-frame pump hook)
 - [ ] `SteamMultiplayerPeer` implementing Godot's `MultiplayerPeer`
@@ -74,9 +83,9 @@ Drop the Steamworks SDK native libraries (`steam_api64.dll` / `libsteam_api.so`)
 - [ ] Godot signal wrappers for common callbacks
 - [ ] `steam_appid.txt` handling and export plugin
 
-### Phase 3 — Packaging & CI
+### Phase 3: Packaging & CI
 
-- [ ] GitHub Actions — build, test, coverage on push
+- [ ] GitHub Actions: build, test, coverage on push
 - [ ] NuGet package (`Manifold.Core` standalone)
 - [ ] Godot Asset Library submission (`Manifold.Godot`)
 - [ ] SDK update workflow (re-run ManifoldGen, validate sizes, publish)
@@ -85,7 +94,7 @@ Drop the Steamworks SDK native libraries (`steam_api64.dll` / `libsteam_api.so`)
 
 ## Contributing
 
-PRs are welcome. If you find a bug, hit a missing API, or have a question about the architecture, open an issue. The codebase is still moving fast during Phase 2 so it's worth checking open issues before starting large changes — no point duplicating work.
+Contributions are very welcome! Whether it's a bug report, a missing API, a question about the architecture, or a pull request, feel free to open an issue and start a conversation. The project is still in active development, so if you're planning something larger it's worth reaching out first so we can figure out the best approach together.
 
 ---
 
