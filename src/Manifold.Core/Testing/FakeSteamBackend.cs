@@ -1,7 +1,4 @@
-// Manifold — FakeSteamBackend
-// A safe, configurable test double implementing all backend capability interfaces.
-// Tests override only what they need — everything else returns safe defaults.
-// The production implementation (LiveSteamBackend) forwards to SteamNative P/Invoke.
+// In-memory test double for all Steam backend capability interfaces.
 
 namespace Manifold.Core.Testing;
 
@@ -13,14 +10,10 @@ namespace Manifold.Core.Testing;
 /// </summary>
 public class FakeSteamBackend : IUserBackend, IMatchmakingBackend, INetworkingBackend
 {
-    // ── Call recording ───────────────────────────────────────────────────────
-
     /// <summary>Log of all method names called on this instance, in order.</summary>
     public List<string> CallLog { get; } = new();
 
     private void Record(string name) => CallLog.Add(name);
-
-    // ── Configurable state ───────────────────────────────────────────────────
 
     /// <summary>Value returned by <see cref="BLoggedOn"/>. Default: <c>true</c>.</summary>
     public bool IsLoggedOn { get; set; } = true;
@@ -40,15 +33,11 @@ public class FakeSteamBackend : IUserBackend, IMatchmakingBackend, INetworkingBa
     /// <summary>Value returned by <see cref="GetLobbyOwner"/>.</summary>
     public ulong LobbyOwner { get; set; } = 0;
 
-    // ── IUserBackend ─────────────────────────────────────────────────────────
-
     /// <inheritdoc/>
     public ulong GetSteamID()    { Record(nameof(GetSteamID));  return LocalSteamId; }
 
     /// <inheritdoc/>
     public bool BLoggedOn()      { Record(nameof(BLoggedOn));   return IsLoggedOn; }
-
-    // ── IMatchmakingBackend ──────────────────────────────────────────────────
 
     /// <inheritdoc/>
     public ulong CreateLobby(int lobbyType, int maxMembers)
@@ -115,8 +104,6 @@ public class FakeSteamBackend : IUserBackend, IMatchmakingBackend, INetworkingBa
         Record(nameof(SetLobbyJoinable));
         return true;
     }
-
-    // ── INetworkingBackend ───────────────────────────────────────────────────
 
     /// <inheritdoc/>
     public uint CreateListenSocketP2P(int virtualPort)

@@ -1,7 +1,4 @@
-// Manifold — Backend capability interfaces
-// Each interface covers a logical slice of the Steam API.
-// Tests implement only the capabilities they need via FakeSteamBackend.
-// Production code uses LiveSteamBackend which forwards to SteamNative P/Invoke.
+// Backend capability interfaces — one per Steam API subsystem.
 
 namespace Manifold.Core.Testing;
 

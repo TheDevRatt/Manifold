@@ -1,11 +1,4 @@
-// Manifold — CallbackDispatcher
-// Manual Steam callback dispatcher with type-safe subscriptions and CancelAll().
-//
-// Design:
-//   • Subscriptions are keyed by callback ID (k_iCallback).
-//   • Callbacks are dispatched on the pump thread (via Tick()).
-//   • Thread-safe: subscribe/unsubscribe from any thread; Tick() is pump-only.
-//   • CancelAll() drains all subscriptions — safe to call on shutdown.
+// Routes raw Steam callback data to typed C# handlers.
 
 using System;
 using System.Collections.Concurrent;
@@ -20,18 +13,11 @@ namespace Manifold.Core.Dispatch;
 /// </summary>
 public sealed class CallbackDispatcher
 {
-    // ── Internal registration ─────────────────────────────────────────────────
-
     private readonly ConcurrentDictionary<int, List<ICallbackHandler>> _handlers = new();
     private readonly object _lock = new();
 
-    // ── Raw data queue ────────────────────────────────────────────────────────
-    // The pump thread enqueues raw (callbackId, bytes) pairs.
-    // Tick() drains the queue on the same pump thread → no marshalling races.
-
+    // The pump thread enqueues raw (callbackId, bytes) pairs; Tick() drains the queue on the same pump thread → no marshalling races.
     private readonly ConcurrentQueue<(int Id, byte[] Data)> _queue = new();
-
-    // ── Public API ────────────────────────────────────────────────────────────
 
     /// <summary>
     /// Registers a typed callback handler. Returns a token that can be disposed
@@ -97,8 +83,6 @@ public sealed class CallbackDispatcher
         while (_queue.TryDequeue(out _)) { }
     }
 
-    // ── Internal unregister (called by TypedHandler.Dispose) ──────────────────
-
     internal void Unregister(int id, ICallbackHandler entry)
     {
         lock (_lock)
@@ -107,8 +91,6 @@ public sealed class CallbackDispatcher
                 list.Remove(entry);
         }
     }
-
-    // ── Nested types ──────────────────────────────────────────────────────────
 
     internal interface ICallbackHandler
     {

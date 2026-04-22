@@ -31,8 +31,6 @@ public readonly record struct SteamId : IEquatable<SteamId>, IComparable<SteamId
     /// <summary><c>true</c> if this ID is non-zero and may represent a real Steam entity.</summary>
     public bool IsValid => Value != 0;
 
-    // ── Comparison ───────────────────────────────────────────────────────────
-
     /// <inheritdoc/>
     public int CompareTo(SteamId other) => Value.CompareTo(other.Value);
 
@@ -45,8 +43,6 @@ public readonly record struct SteamId : IEquatable<SteamId>, IComparable<SteamId
     /// <inheritdoc/>
     public static bool operator >=(SteamId a, SteamId b) => a.Value >= b.Value;
 
-    // ── Conversion ───────────────────────────────────────────────────────────
-
     /// <summary>Implicitly converts a <see cref="SteamId"/> to its underlying <see cref="ulong"/> value.</summary>
     public static implicit operator ulong(SteamId id)     => id.Value;
 
@@ -55,8 +51,6 @@ public readonly record struct SteamId : IEquatable<SteamId>, IComparable<SteamId
     /// Use <see cref="Parse"/> or <see cref="TryParse"/> when converting from strings.
     /// </summary>
     public static explicit operator SteamId(ulong value)  => new(value);
-
-    // ── Parsing ──────────────────────────────────────────────────────────────
 
     /// <summary>
     /// Parses a decimal string representation of a Steam ID.
@@ -79,8 +73,6 @@ public readonly record struct SteamId : IEquatable<SteamId>, IComparable<SteamId
         result = Invalid;
         return false;
     }
-
-    // ── Display ──────────────────────────────────────────────────────────────
 
     /// <inheritdoc/>
     public override string ToString() => Value.ToString(CultureInfo.InvariantCulture);

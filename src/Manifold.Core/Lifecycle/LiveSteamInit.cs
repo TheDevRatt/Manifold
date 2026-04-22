@@ -7,7 +7,7 @@ namespace Manifold.Core.Lifecycle;
 
 /// <summary>
 /// Production implementation of <see cref="ISteamInit"/>: delegates to
-/// the generated <see cref="SteamNativeMethods"/> P/Invoke layer.
+/// the generated SteamNative P/Invoke layer.
 /// </summary>
 public sealed class LiveSteamInit : ISteamInit
 {

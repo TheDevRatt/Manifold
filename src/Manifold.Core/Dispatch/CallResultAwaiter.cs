@@ -1,12 +1,4 @@
-// Manifold — CallResultAwaiter<T>
 // Bridges a Steam SteamAPICall_t handle to a C# Task<T> with CancellationToken + timeout.
-//
-// Design:
-//   • Each awaiter registers a one-shot subscription on CallbackDispatcher.
-//   • On Tick(), the dispatcher routes the result callback to Resolve().
-//   • On cancellation or timeout, the TaskCompletionSource is cancelled/faulted
-//     and the dispatcher subscription is dropped immediately.
-//   • Thread-safe: Resolve() and Cancel() are both safe from any thread.
 
 using System;
 using System.Threading;
@@ -31,8 +23,6 @@ public sealed class CallResultAwaiter<T> : IDisposable where T : unmanaged
     private readonly CancellationTokenSource? _timeoutCts;
     private int _settled; // 0 = pending, 1 = settled (CAS guard)
 
-    // ── Factory ───────────────────────────────────────────────────────────────
-
     /// <summary>
     /// Creates an awaiter and registers it with <paramref name="dispatcher"/>.
     /// </summary>
@@ -48,8 +38,6 @@ public sealed class CallResultAwaiter<T> : IDisposable where T : unmanaged
     {
         return new CallResultAwaiter<T>(dispatcher, callHandle, cancellationToken, timeout);
     }
-
-    // ── Construction ──────────────────────────────────────────────────────────
 
     private CallResultAwaiter(
         CallbackDispatcher dispatcher,
@@ -84,8 +72,6 @@ public sealed class CallResultAwaiter<T> : IDisposable where T : unmanaged
         }
     }
 
-    // ── Public API ────────────────────────────────────────────────────────────
-
     /// <summary>
     /// The task that completes when the Steam call result arrives,
     /// or faults/cancels if timeout or cancellation fires first.
@@ -99,8 +85,6 @@ public sealed class CallResultAwaiter<T> : IDisposable where T : unmanaged
         _ctReg.Dispose();
         _timeoutCts?.Dispose();
     }
-
-    // ── Internal ──────────────────────────────────────────────────────────────
 
     private void OnCallback(T result)
     {

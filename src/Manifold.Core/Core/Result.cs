@@ -1,7 +1,4 @@
-// Manifold — Result<T>
-// Minimal discriminated result type used for operations that must not throw.
-// Specifically: SteamLifecycle.Initialize(), which callers branch on without try/catch.
-// Not a general-purpose algebraic type — keep it small.
+// Minimal discriminated result type. Not a general-purpose algebraic type.
 
 namespace Manifold.Core;
 

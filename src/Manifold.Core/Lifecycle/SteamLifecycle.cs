@@ -1,6 +1,4 @@
-// Manifold — SteamLifecycle
 // Manages Steam API init/shutdown and the RunCallbacks pump.
-// Thread-safe state machine: Uninitialized → Initializing → Running → ShuttingDown → Stopped.
 
 using System;
 using System.Threading;
@@ -14,8 +12,6 @@ namespace Manifold.Core.Lifecycle;
 /// </summary>
 public sealed class SteamLifecycle : IDisposable
 {
-    // ── State machine ────────────────────────────────────────────────────────
-
     public enum State
     {
         Uninitialized,
@@ -30,22 +26,14 @@ public sealed class SteamLifecycle : IDisposable
     /// <summary>Current lifecycle state.</summary>
     public State CurrentState => (State)Volatile.Read(ref _state);
 
-    // ── Singleton guard ───────────────────────────────────────────────────────
-
     private static SteamLifecycle? _active;
-
-    // ── Dependencies ──────────────────────────────────────────────────────────
 
     private readonly ISteamInit _init;
     private readonly CallbackDispatcher _dispatcher;
 
-    // ── Pump thread ───────────────────────────────────────────────────────────
-
     private Thread? _pumpThread;
     private readonly CancellationTokenSource _cts = new();
     private TimeSpan _pumpInterval = TimeSpan.FromMilliseconds(15);
-
-    // ── Events ────────────────────────────────────────────────────────────────
 
     /// <summary>Raised after Steam initialises successfully.</summary>
     public event Action? Initialized;
@@ -56,8 +44,6 @@ public sealed class SteamLifecycle : IDisposable
     /// <summary>Raised if Steam init or the pump throws an unhandled exception.</summary>
     public event Action<Exception>? FatalError;
 
-    // ── Construction ──────────────────────────────────────────────────────────
-
     /// <param name="init">Strategy for SteamAPI_Init / SteamAPI_Shutdown calls.</param>
     /// <param name="dispatcher">Callback dispatcher this lifecycle drives.</param>
     public SteamLifecycle(ISteamInit init, CallbackDispatcher dispatcher)
@@ -65,8 +51,6 @@ public sealed class SteamLifecycle : IDisposable
         _init = init ?? throw new ArgumentNullException(nameof(init));
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
     }
-
-    // ── Public API ────────────────────────────────────────────────────────────
 
     /// <summary>
     /// Initialises Steam and starts the RunCallbacks pump on a background thread.
@@ -146,8 +130,6 @@ public sealed class SteamLifecycle : IDisposable
         Stop();
         _cts.Dispose();
     }
-
-    // ── Pump loop ─────────────────────────────────────────────────────────────
 
     private void PumpLoop()
     {
