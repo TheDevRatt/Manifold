@@ -9,7 +9,7 @@ Multiplayer.MultiplayerPeer = peer;
 // @rpc just works from here.
 ```
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![.NET 8](https://img.shields.io/badge/.NET-8-purple)](https://dotnet.microsoft.com) [![Steamworks SDK](https://img.shields.io/badge/Steamworks%20SDK-1.64-informational)](https://partner.steamgames.com) [![Tests](https://img.shields.io/badge/tests-80%20passing-brightgreen)]() [![Status](https://img.shields.io/badge/status-WIP-orange)]()
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![.NET 8](https://img.shields.io/badge/.NET-8-purple)](https://dotnet.microsoft.com) [![Steamworks SDK](https://img.shields.io/badge/Steamworks%20SDK-1.64-informational)](https://partner.steamgames.com) [![Tests](https://img.shields.io/badge/tests-197%20passing-brightgreen)]() [![Status](https://img.shields.io/badge/status-WIP-orange)]()
 
 ---
 
@@ -74,14 +74,17 @@ Drop the Steamworks SDK native libraries into your project's output directory. A
 - [x] Native struct size validator: catches packing bugs against real SDK headers at build time
 - [x] 80 contract tests
 
-### Phase 2: Godot Integration *(in progress)*
+### Phase 2: Godot Integration ✅
 
-- [ ] `SteamManager` autoload (init, shutdown, per-frame pump hook)
-- [ ] `SteamMultiplayerPeer` implementing Godot's `MultiplayerPeer`
-- [ ] Lobby API (create, join, leave, metadata, member list)
-- [ ] `ISteamNetworkingSockets` send/receive pipeline
-- [ ] Godot signal wrappers for common callbacks
-- [ ] `steam_appid.txt` handling and export plugin
+- [x] `PacketHeader` (2-byte encode/decode, version + kind + channel)
+- [x] `HandshakeProtocol` (server→client peer ID assignment, 5-second timeout)
+- [x] `PeerIdMapper` (bidirectional SteamId ↔ connection ↔ Godot ID)
+- [x] `SteamNetworkingCore` (internal `ISteamNetworkingSockets` wrapper, receive pipeline)
+- [x] `SteamMultiplayerPeer` (all 21 overrides, full state machine, disconnect info, `UnreliableOrdered` warning)
+- [x] `SteamLobbySession` scaffold (Phase 3 stubs)
+- [x] `SteamPeerRegistry` + `ISteamPeer` (lifecycle shutdown integration)
+- [x] State machine, protocol, and integration tests (197 passing)
+- [ ] End-to-end loopback: two peers connect via Steam P2P — manual gate (requires live Steam session)
 
 ### Phase 3: Packaging & CI
 
