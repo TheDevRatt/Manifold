@@ -17,14 +17,22 @@ public static class CallResultAwaiter
     private static readonly List<Action<Exception>> _activeCancellers = new();
     private static readonly object _cancelLock = new();
 
+    /// <summary>Registers a cancellation callback to be invoked on global shutdown.</summary>
     internal static void RegisterCanceller(Action<Exception> cancel)
     {
         lock (_cancelLock) _activeCancellers.Add(cancel);
     }
 
+    /// <summary>Removes a previously registered cancellation callback.</summary>
     internal static void UnregisterCanceller(Action<Exception> cancel)
     {
         lock (_cancelLock) _activeCancellers.Remove(cancel);
+    }
+
+    /// <summary>Resets all static state. For test isolation only.</summary>
+    internal static void ResetForTesting()
+    {
+        lock (_cancelLock) _activeCancellers.Clear();
     }
 
     /// <summary>

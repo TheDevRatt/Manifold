@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 using Manifold.Core.Interop;
@@ -41,7 +42,7 @@ internal static class CallbackDispatcher
     /// Registers a raw <see cref="IntPtr"/> handler for <paramref name="callbackId"/>.
     /// The pointer passed to the handler points to the callback struct data.
     /// </summary>
-    internal static void Register(int callbackId, Action<IntPtr> handler)
+    internal static IDisposable Register(int callbackId, Action<IntPtr> handler)
     {
         lock (_lock)
         {
@@ -49,6 +50,7 @@ internal static class CallbackDispatcher
                 _handlers[callbackId] = list = new List<Action<IntPtr>>();
             list.Add(handler);
         }
+        return new SubscriptionToken(callbackId, handler);
     }
 
     /// <summary>Removes a previously registered handler.</summary>
@@ -69,8 +71,7 @@ internal static class CallbackDispatcher
     {
         int id = CallbackId<T>.Value;
         void RawHandler(IntPtr ptr) => handler(*(T*)ptr);
-        Register(id, RawHandler);
-        return new SubscriptionToken(id, RawHandler);
+        return Register(id, RawHandler);
     }
 
     // ── Call-result registration ──────────────────────────────────────────────
@@ -103,11 +104,16 @@ internal static class CallbackDispatcher
     /// </summary>
     internal static void CancelAll(Exception reason)
     {
+        List<(CallResultRegistration, ulong)> pending;
         lock (_lock)
         {
+            pending = _callResults.Select(kv => (kv.Value, kv.Key)).ToList();
             _handlers.Clear();
             _callResults.Clear();
         }
+        // Notify call result handlers of shutdown failure (ioFailed=true)
+        foreach (var (reg, _) in pending)
+            reg.Handler(IntPtr.Zero, true);
     }
 
     // ── Per-frame pump ────────────────────────────────────────────────────────
@@ -226,8 +232,9 @@ internal static class CallbackDispatcher
         {
             _handlers.Clear();
             _callResults.Clear();
+            GameThreadId = 0;
         }
-        GameThreadId = 0;
+        CallResultAwaiter.ResetForTesting();
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -261,7 +268,8 @@ internal static class CallbackId<T>
 {
     // Use a getter instead of a static field initializer so any
     // InvalidOperationException is not wrapped in TypeInitializationException.
-    public static int Value => GetId();
+    internal static int Value => _cached ??= GetId();
+    private static int? _cached;
 
     private static int GetId()
     {

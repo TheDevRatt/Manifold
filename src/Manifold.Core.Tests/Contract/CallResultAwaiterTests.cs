@@ -29,8 +29,8 @@ public sealed class CallResultAwaiterTests : IDisposable
         CallbackDispatcher.InjectCallResultForTest(
             1234, new SteamServersConnected_t(), ioFailed: false);
 
-        var result = await awaiter.Task.WaitAsync(TimeSpan.FromSeconds(2));
-        Assert.NotNull((object?)result);
+        await awaiter.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.True(awaiter.Task.IsCompletedSuccessfully);
     }
 
     [Fact]
@@ -129,8 +129,7 @@ public sealed class CallResultAwaiterTests : IDisposable
             3333, new SteamServersConnected_t(), ioFailed: false);
 
         // Task must complete exactly once without faulting
-        var result = await awaiter.Task.WaitAsync(TimeSpan.FromSeconds(2));
-        Assert.NotNull((object?)result);
+        await awaiter.Task.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.True(awaiter.Task.IsCompletedSuccessfully);
     }
 }

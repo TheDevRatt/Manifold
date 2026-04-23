@@ -7,6 +7,7 @@
 
 using System;
 using System.Runtime.InteropServices;
+using System.Threading;
 using Manifold.Core.Dispatch;
 using Manifold.Core.Interop;
 using Xunit;
@@ -132,4 +133,47 @@ public sealed class CallbackDispatcherTests : IDisposable
     }
 
     private struct BadStruct { public int X; } // no k_iCallback
+
+    // ── Register returns IDisposable ──────────────────────────────────────────
+
+    [Fact]
+    public unsafe void Register_ReturnsDisposable_CanUnsubscribe()
+    {
+        int count = 0;
+        var token = CallbackDispatcher.Register(
+            SteamServersConnected_t.k_iCallback,
+            _ => count++);
+
+        var value = new SteamServersConnected_t();
+        CallbackDispatcher.InjectForTest(
+            SteamServersConnected_t.k_iCallback,
+            new IntPtr(&value));
+        Assert.Equal(1, count);
+
+        token.Dispose();
+        CallbackDispatcher.InjectForTest(
+            SteamServersConnected_t.k_iCallback,
+            new IntPtr(&value));
+        Assert.Equal(1, count); // still 1 — unsubscribed
+    }
+
+    // ── Thread guard (happy-path) ─────────────────────────────────────────────
+
+    [Fact]
+    public unsafe void DebugAssertMainThread_HappyPath_DoesNotThrow()
+    {
+        // Set GameThreadId to the current thread so the debug assert passes.
+        // (Sad-path — calling from a wrong thread — only fires in DEBUG builds.)
+        CallbackDispatcher.GameThreadId = Thread.CurrentThread.ManagedThreadId;
+
+        var value = new SteamServersConnected_t();
+        // InjectForTest itself doesn't call DebugAssertMainThread, but we verify
+        // that setting GameThreadId = current thread then dispatching works fine.
+        int count = 0;
+        using var _ = CallbackDispatcher.Subscribe<SteamServersConnected_t>(_ => count++);
+        CallbackDispatcher.InjectForTest(
+            SteamServersConnected_t.k_iCallback,
+            new IntPtr(&value));
+        Assert.Equal(1, count);
+    }
 }
