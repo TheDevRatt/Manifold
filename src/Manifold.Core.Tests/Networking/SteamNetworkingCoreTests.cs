@@ -1,8 +1,10 @@
 // Tests for SteamNetworkingCore using FakeSteamBackend — no real Steam required.
 
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Linq;
+using Manifold.Core.Interop;
 using Manifold.Core.Networking;
 using Manifold.Core.Testing;
 using Xunit;
@@ -231,18 +233,23 @@ public class SteamNetworkingCoreTests
     }
 
     [Fact]
-    public void HandleConnectionStatusChanged_IncomingOnClient_DoesNotFireIncomingConnectionEvent()
+    public void HandleConnectionStatusChanged_IncomingOnClient_FiresConnectionStatusChanged_NotIncoming()
     {
-        // Client mode: incoming connections don't make sense, should be ignored
+        // Client mode: a Connecting state triggers ConnectionStatusChanged (not IncomingConnection)
         var core = MakeCore(out _);
         core.CreateClient(new SteamId(1));
-        uint? captured = null;
-        core.IncomingConnection += conn => captured = conn;
+        uint? incoming = null;
+        (uint conn, int ns)? changed = null;
+        core.IncomingConnection     += c => incoming = c;
+        core.ConnectionStatusChanged += (c, ns, os, dbg) => changed = (c, ns);
 
+        // State 1 = k_ESteamNetworkingConnectionState_Connecting
         core.HandleConnectionStatusChanged(connection: 99, newState: 1, oldState: 0, debugMsg: "");
 
-        // Client is not a host — IncomingConnection should NOT fire
-        Assert.Null(captured);
+        Assert.Null(incoming);                      // IncomingConnection NOT fired
+        Assert.NotNull(changed);                    // ConnectionStatusChanged IS fired
+        Assert.Equal(99u, changed!.Value.conn);
+        Assert.Equal(1, changed!.Value.ns);
     }
 
     [Fact]
@@ -290,5 +297,89 @@ public class SteamNetworkingCoreTests
         var list = new List<ReceivedPacket>();
         core.DrainMessages(list);
         Assert.Empty(list);
+    }
+
+    // ── ProcessMessage (direct, unsafe) ───────────────────────────────────────
+
+    [Fact]
+    public unsafe void ProcessMessage_ValidPacket_AddsReceivedPacketToOutput()
+    {
+        // Payload: "Hello" (5 bytes) with a 2-byte Manifold header
+        // Byte 0 = 0x00 → version=0, kind=Data(0x0)
+        // Byte 1 = 0x01 → channel 1
+        // Bytes 2-6 = 'H','e','l','l','o'
+        var list = new List<ReceivedPacket>();
+        byte[] payload = [0x00, 0x01, 0x48, 0x65, 0x6C, 0x6C, 0x6F];
+
+        fixed (byte* pData = payload)
+        {
+            var msg = new SteamNetworkingMessage_t
+            {
+                m_pData  = (IntPtr)pData,
+                m_cbSize = payload.Length,
+                m_conn   = 42,
+                // m_pfnRelease = IntPtr.Zero — Release() is a no-op (safe in tests)
+            };
+            SteamNetworkingCore.ProcessMessage((IntPtr)(&msg), list);
+        }
+
+        Assert.Single(list);
+        Assert.Equal(42u, list[0].Connection);
+        Assert.Equal((byte)1, list[0].Channel);
+        Assert.Equal(PacketKind.Data, list[0].Kind);
+        Assert.Equal(5, list[0].Size);
+        Assert.Equal(0x48, list[0].Buffer[0]); // 'H'
+        Assert.Equal(0x65, list[0].Buffer[1]); // 'e'
+
+        ArrayPool<byte>.Shared.Return(list[0].Buffer);
+    }
+
+    [Fact]
+    public unsafe void ProcessMessage_TooShort_DoesNotAddToOutput()
+    {
+        // 1 byte — less than PacketHeader.Size=2
+        var list = new List<ReceivedPacket>();
+        byte[] tooShort = [0x01];
+
+        fixed (byte* pData = tooShort)
+        {
+            var msg = new SteamNetworkingMessage_t
+            {
+                m_pData  = (IntPtr)pData,
+                m_cbSize = 1,
+                m_conn   = 1,
+            };
+            SteamNetworkingCore.ProcessMessage((IntPtr)(&msg), list);
+        }
+
+        Assert.Empty(list);
+    }
+
+    [Fact]
+    public unsafe void ProcessMessage_ZeroPayload_ControlPacket_AddsToOutput()
+    {
+        // Header only — 2 bytes, no payload
+        // Byte 0 = 0x02 → version=0, kind=HandshakeAck(0x2)
+        // Byte 1 = 0x00 → channel 0
+        var list = new List<ReceivedPacket>();
+        byte[] headerOnly = [0x02, 0x00];
+
+        fixed (byte* pData = headerOnly)
+        {
+            var msg = new SteamNetworkingMessage_t
+            {
+                m_pData  = (IntPtr)pData,
+                m_cbSize = 2,
+                m_conn   = 77,
+            };
+            SteamNetworkingCore.ProcessMessage((IntPtr)(&msg), list);
+        }
+
+        Assert.Single(list);
+        Assert.Equal(77u, list[0].Connection);
+        Assert.Equal(PacketKind.HandshakeAck, list[0].Kind);
+        Assert.Equal(0, list[0].Size); // no payload bytes
+
+        ArrayPool<byte>.Shared.Return(list[0].Buffer);
     }
 }

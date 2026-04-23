@@ -17,7 +17,7 @@ namespace Manifold.Core.Networking;
 /// Not part of any public API — consumed internally by <c>SteamMultiplayerPeer</c>.
 /// (MASTER_DESIGN §8.1)
 /// </summary>
-internal sealed class SteamNetworkingCore
+internal sealed class SteamNetworkingCore : IDisposable
 {
     private readonly INetworkingBackend _backend;
 
@@ -35,6 +35,14 @@ internal sealed class SteamNetworkingCore
 
     /// <summary>Maximum number of messages to drain per poll frame.</summary>
     internal const int MaxMessagesPerFrame = 512;
+
+    // ── Steam connection state constants (steamnetworkingtypes.h) ─────────────
+    private const int k_ESteamNetworkingConnectionState_None                   = 0;
+    private const int k_ESteamNetworkingConnectionState_Connecting             = 1;
+    private const int k_ESteamNetworkingConnectionState_FindingRoute           = 2;
+    private const int k_ESteamNetworkingConnectionState_Connected              = 3;
+    private const int k_ESteamNetworkingConnectionState_ClosedByPeer           = 4;
+    private const int k_ESteamNetworkingConnectionState_ProblemDetectedLocally = 6;
 
     // ── Events ────────────────────────────────────────────────────────────────
 
@@ -137,11 +145,6 @@ internal sealed class SteamNetworkingCore
     /// </summary>
     internal void HandleConnectionStatusChanged(uint connection, int newState, int oldState, string debugMsg)
     {
-        const int k_ESteamNetworkingConnectionState_Connecting           = 1;
-        // const int k_ESteamNetworkingConnectionState_Connected         = 3;
-        // const int k_ESteamNetworkingConnectionState_ClosedByPeer      = 4;
-        // const int k_ESteamNetworkingConnectionState_ProblemDetectedLocally = 6;
-
         if (_isHost && newState == k_ESteamNetworkingConnectionState_Connecting)
         {
             // Incoming connection — fire event; SteamMultiplayerPeer will call AcceptAndTrack
@@ -185,6 +188,9 @@ internal sealed class SteamNetworkingCore
         }
     }
 
+    /// <summary>Releases resources. Equivalent to calling <see cref="Close"/>.</summary>
+    public void Dispose() => Close();
+
     // ── Server connection accessor (client only) ──────────────────────────────
 
     /// <summary>The server connection handle. Only valid in client mode after <see cref="CreateClient"/>.</summary>
@@ -220,7 +226,7 @@ internal sealed class SteamNetworkingCore
         }
     }
 
-    private static unsafe void ProcessMessage(
+    internal static unsafe void ProcessMessage(
         IntPtr msgPtr,
         System.Collections.Generic.List<ReceivedPacket> output)
     {

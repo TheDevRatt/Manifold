@@ -81,7 +81,8 @@ internal static partial class SteamNative
 }
 
 /// <summary>
-/// Steam networking message struct. Pack=1 (explicitly packed in SDK steamnetworkingtypes.h).
+/// Steam networking message struct. Layout verified against Steamworks SDK 1.64 steamnetworkingtypes.h.
+/// Pack=1 used for layout correctness; field offsets match SDK struct layout.
 /// Obtained from ReceiveMessagesOnConnection / ReceiveMessagesOnPollGroup as a raw pointer.
 /// Must call <see cref="Release"/> after consuming m_pData to free the Steam-owned buffer.
 /// (Steamworks SDK 1.64 steamnetworkingtypes.h)
@@ -90,18 +91,29 @@ internal static partial class SteamNative
     System.Runtime.InteropServices.LayoutKind.Sequential, Pack = 1)]
 internal unsafe struct SteamNetworkingMessage_t
 {
+    /// <summary>Pointer to the message payload data. Valid only until Release() is called.</summary>
     internal System.IntPtr m_pData;         // pointer to message payload
+    /// <summary>Size of the payload data in bytes.</summary>
     internal int           m_cbSize;        // payload size in bytes
+    /// <summary>HSteamNetConnection handle — identifies the sender.</summary>
     internal uint          m_conn;          // HSteamNetConnection — sender
     // SteamNetworkingIdentity m_identitySender — 136 bytes, skip via padding
     private fixed byte     _identityPad[136];
+    /// <summary>User-defined connection data (set via SetConnectionUserData).</summary>
     internal long          m_nConnUserData;
+    /// <summary>Timestamp when the message was received (microseconds).</summary>
     internal long          m_usecTimeReceived;
+    /// <summary>Message sequence number.</summary>
     internal long          m_nMessageNumber;
+    /// <summary>Internal data-free callback. Do not call directly; use Release().</summary>
     internal System.IntPtr m_pfnFreeData;
+    /// <summary>Message release callback. Always call Release() to free the message.</summary>
     internal System.IntPtr m_pfnRelease;    // call this to free the message
+    /// <summary>The channel this message was sent on.</summary>
     internal int           m_nChannel;
+    /// <summary>Lane index (for multi-lane connections).</summary>
     internal int           m_idxLane;
+    /// <summary>Reserved padding.</summary>
     internal int           m_pad;
 
     /// <summary>
