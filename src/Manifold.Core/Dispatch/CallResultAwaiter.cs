@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -55,53 +56,54 @@ public sealed class CallResultAwaiter<T> : IDisposable where T : unmanaged
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     private readonly ulong _callHandle;
-    private readonly IDisposable _subscription;
     private readonly CancellationTokenRegistration _ctReg;
     private readonly CancellationTokenSource? _timeoutCts;
     private readonly Action<Exception> _canceller;
     private int _settled; // 0 = pending, 1 = settled (CAS guard)
 
     /// <summary>
-    /// Creates an awaiter and registers it with <paramref name="dispatcher"/>.
+    /// Creates an awaiter and registers it with the static <see cref="CallbackDispatcher"/>.
     /// </summary>
-    /// <param name="dispatcher">The dispatcher that will route the result callback.</param>
     /// <param name="callHandle">The <c>SteamAPICall_t</c> handle returned by the Steam API.</param>
     /// <param name="cancellationToken">Optional external cancellation.</param>
     /// <param name="timeout">Optional timeout (defaults to 30 seconds if omitted).</param>
     public static CallResultAwaiter<T> Create(
-        CallbackDispatcher dispatcher,
         ulong callHandle,
         CancellationToken cancellationToken = default,
         TimeSpan? timeout = null)
     {
-        return new CallResultAwaiter<T>(dispatcher, callHandle, cancellationToken, timeout);
+        return new CallResultAwaiter<T>(callHandle, cancellationToken, timeout);
     }
 
-    private CallResultAwaiter(
-        CallbackDispatcher dispatcher,
+    private unsafe CallResultAwaiter(
         ulong callHandle,
         CancellationToken cancellationToken,
         TimeSpan? timeout)
     {
         _callHandle = callHandle;
 
-        // Subscribe to the result callback type — filtered to our call handle
-        _subscription = dispatcher.Subscribe<T>(OnCallback);
+        // Register as a call result with the dispatcher
+        int expectedCallbackId = CallbackId<T>.Value;
+        int dataSize           = sizeof(T);
+        CallbackDispatcher.RegisterCallResult(
+            callHandle,
+            handler: OnRawCallback,
+            expectedCallbackId: expectedCallbackId,
+            dataSize: dataSize);
 
         // Timeout: default 30s
         var effectiveTimeout = timeout ?? TimeSpan.FromSeconds(30);
         _timeoutCts = new CancellationTokenSource(effectiveTimeout);
 
-        // Timeout fires → SteamCallResultTimeoutException
         var capturedTimeout = effectiveTimeout;
-        var capturedHandle = callHandle;
+        var capturedHandle  = callHandle;
         _timeoutCts.Token.Register(() =>
             TrySettle(() =>
                 _tcs.TrySetException(
                     new SteamCallResultTimeoutException(capturedHandle, capturedTimeout))),
             useSynchronizationContext: false);
 
-        // External cancellation fires → TaskCanceledException
+        // External cancellation → TaskCanceledException
         if (cancellationToken.CanBeCanceled)
         {
             _ctReg = cancellationToken.Register(() =>
@@ -109,7 +111,7 @@ public sealed class CallResultAwaiter<T> : IDisposable where T : unmanaged
                 useSynchronizationContext: false);
         }
 
-        // Register global shutdown canceller — faults TCS with the provided exception
+        // Global shutdown canceller
         _canceller = ex => TrySettle(() => _tcs.TrySetException(ex));
         CallResultAwaiter.RegisterCanceller(_canceller);
     }
@@ -124,13 +126,21 @@ public sealed class CallResultAwaiter<T> : IDisposable where T : unmanaged
     public void Dispose()
     {
         CallResultAwaiter.UnregisterCanceller(_canceller);
-        _subscription.Dispose();
+        CallbackDispatcher.CancelCallResult(_callHandle);
         _ctReg.Dispose();
         _timeoutCts?.Dispose();
     }
 
-    private void OnCallback(T result)
+    private unsafe void OnRawCallback(IntPtr ptr, bool ioFailed)
     {
+        if (ioFailed)
+        {
+            TrySettle(() =>
+                _tcs.TrySetException(
+                    new SteamIOFailedException(_callHandle, typeof(T).Name)));
+            return;
+        }
+        T result = *(T*)ptr;
         TrySettle(() => _tcs.TrySetResult(result));
     }
 

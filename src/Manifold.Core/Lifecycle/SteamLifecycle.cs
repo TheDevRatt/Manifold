@@ -34,7 +34,6 @@ public sealed class SteamLifecycle : IDisposable
     private bool _disposed;
 
     private readonly ISteamInit _init;
-    private readonly CallbackDispatcher _dispatcher;
 
     /// <summary>ManagedThreadId of the thread that called Initialize().</summary>
     private int _gameThreadId;
@@ -67,16 +66,14 @@ public sealed class SteamLifecycle : IDisposable
     // ── Constructor ───────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Creates a new lifecycle using the provided Steam init strategy and dispatcher.
+    /// Creates a new lifecycle using the provided Steam init strategy.
     /// Call <see cref="Initialize(SteamInitOptions)"/> on the returned instance (or use
     /// the static <see cref="Initialize(SteamInitOptions)"/> factory) to start Steam.
     /// </summary>
     /// <param name="init">Strategy for SteamAPI calls (production or test double).</param>
-    /// <param name="dispatcher">Callback dispatcher this lifecycle drives.</param>
-    public SteamLifecycle(ISteamInit init, CallbackDispatcher dispatcher)
+    public SteamLifecycle(ISteamInit init)
     {
-        _init       = init       ?? throw new ArgumentNullException(nameof(init));
-        _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
+        _init = init ?? throw new ArgumentNullException(nameof(init));
     }
 
     // ── Instance Initialize (internal) ───────────────────────────────────────
@@ -121,15 +118,15 @@ public sealed class SteamLifecycle : IDisposable
     // ── Static factory ────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Creates a <see cref="SteamLifecycle"/> backed by <see cref="LiveSteamInit"/> and a
-    /// fresh <see cref="CallbackDispatcher"/>, initialises it, and returns it on success.
+    /// Creates a <see cref="SteamLifecycle"/> backed by <see cref="LiveSteamInit"/>,
+    /// initialises it, and returns it on success.
     /// Only one call per process lifetime is allowed.
     /// </summary>
     /// <param name="options">Configuration options.</param>
     public static Result<SteamLifecycle> Initialize(SteamInitOptions options)
     {
         options ??= new SteamInitOptions();
-        var lifecycle = new SteamLifecycle(new LiveSteamInit(), new CallbackDispatcher());
+        var lifecycle = new SteamLifecycle(new LiveSteamInit());
         return lifecycle.InitializeCore(options);
     }
 
@@ -148,8 +145,16 @@ public sealed class SteamLifecycle : IDisposable
             Thread.CurrentThread.ManagedThreadId == _gameThreadId,
             "RunCallbacks() must be called on the same thread as Initialize().");
 
-        _init.RunCallbacks();   // pump Steam backend (ManualDispatch or auto depending on mode)
-        _dispatcher.Tick();     // dispatch to C# handlers
+        var pipe = _init.GetHSteamPipe();
+        if (pipe == 0)
+        {
+            // No real pipe (e.g. test double) — fall back to ISteamInit.RunCallbacks()
+            _init.RunCallbacks();
+        }
+        else
+        {
+            CallbackDispatcher.Tick(pipe);
+        }
     }
 
     // ── Disposal / shutdown ───────────────────────────────────────────────────
@@ -170,7 +175,7 @@ public sealed class SteamLifecycle : IDisposable
         // SteamPeerRegistry.ShutdownAll();
 
         // Step 4 — clear all CallbackDispatcher handler registrations
-        _dispatcher.CancelAll();
+        CallbackDispatcher.CancelAll(new SteamShutdownException());
 
         // Step 5 — call SteamAPI_Shutdown
         if (IsInitialized)
@@ -199,6 +204,7 @@ public sealed class SteamLifecycle : IDisposable
             _everInitialized = false;
             Current = null;
         }
+        CallbackDispatcher.ResetForTesting();
     }
 
     private Result<SteamLifecycle> InternalInitialize(SteamInitOptions options)
@@ -223,6 +229,9 @@ public sealed class SteamLifecycle : IDisposable
 
             if (options.ManualDispatch)
                 _init.ManualDispatchInit();
+
+            // Capture game-thread ID for CallbackDispatcher debug-assert
+            CallbackDispatcher.GameThreadId = _gameThreadId;
 
             // Populate properties
             AppId         = _init.GetAppId();

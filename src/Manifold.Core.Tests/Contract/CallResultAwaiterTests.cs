@@ -12,9 +12,10 @@ namespace Manifold.Core.Tests.Contract;
 // CallResultAwaiter tests share the static CallResultAwaiter registry with
 // SteamLifecycleTests (which calls CancelAll on Dispose). Run sequentially.
 [Collection("SteamLifecycle")]
-public sealed class CallResultAwaiterTests
+public sealed class CallResultAwaiterTests : IDisposable
 {
-    private readonly CallbackDispatcher _dispatcher = new();
+    public CallResultAwaiterTests()  => CallbackDispatcher.ResetForTesting();
+    public void Dispose()            => CallbackDispatcher.ResetForTesting();
 
     // ── Happy path ────────────────────────────────────────────────────────────
 
@@ -22,12 +23,11 @@ public sealed class CallResultAwaiterTests
     public async Task Result_DeliveredViaDispatcher_CompletesTask()
     {
         using var awaiter = CallResultAwaiter<SteamServersConnected_t>.Create(
-            _dispatcher, callHandle: 1234);
+            callHandle: 1234);
 
         // Simulate Steam delivering the callback
-        var data = MakeBytes(new SteamServersConnected_t());
-        _dispatcher.Enqueue(SteamServersConnected_t.k_iCallback, data);
-        _dispatcher.Tick();
+        CallbackDispatcher.InjectCallResultForTest(
+            1234, new SteamServersConnected_t(), ioFailed: false);
 
         var result = await awaiter.Task.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.NotNull((object?)result);
@@ -37,20 +37,34 @@ public sealed class CallResultAwaiterTests
     public async Task Result_StructFields_AreMarshalledCorrectly()
     {
         using var awaiter = CallResultAwaiter<SteamServerConnectFailure_t>.Create(
-            _dispatcher, callHandle: 5678);
+            callHandle: 5678);
 
         var sent = new SteamServerConnectFailure_t
         {
-            m_eResult = 17,
+            m_eResult        = 17,
             m_bStillRetrying = true
         };
 
-        _dispatcher.Enqueue(SteamServerConnectFailure_t.k_iCallback, MakeBytes(sent));
-        _dispatcher.Tick();
+        CallbackDispatcher.InjectCallResultForTest(5678, sent, ioFailed: false);
 
         var result = await awaiter.Task.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.Equal(17, result.m_eResult);
         Assert.True(result.m_bStillRetrying);
+    }
+
+    // ── ioFailed path ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task IoFailed_True_FaultsWithSteamIOFailedException()
+    {
+        using var awaiter = CallResultAwaiter<SteamServersConnected_t>.Create(
+            callHandle: 8888);
+
+        CallbackDispatcher.InjectCallResultForTest(
+            8888, new SteamServersConnected_t(), ioFailed: true);
+
+        await Assert.ThrowsAsync<SteamIOFailedException>(
+            () => awaiter.Task.WaitAsync(TimeSpan.FromSeconds(2)));
     }
 
     // ── Cancellation ──────────────────────────────────────────────────────────
@@ -60,7 +74,7 @@ public sealed class CallResultAwaiterTests
     {
         using var cts = new CancellationTokenSource();
         using var awaiter = CallResultAwaiter<SteamServersConnected_t>.Create(
-            _dispatcher, callHandle: 9999, cancellationToken: cts.Token);
+            callHandle: 9999, cancellationToken: cts.Token);
 
         cts.Cancel();
 
@@ -73,7 +87,7 @@ public sealed class CallResultAwaiterTests
     {
         using var cts = new CancellationTokenSource();
         using var awaiter = CallResultAwaiter<SteamServersConnected_t>.Create(
-            _dispatcher, callHandle: 1111, cancellationToken: cts.Token);
+            callHandle: 1111, cancellationToken: cts.Token);
 
         cts.Cancel();
         // Wait for cancellation to settle
@@ -81,9 +95,8 @@ public sealed class CallResultAwaiterTests
             () => awaiter.Task.WaitAsync(TimeSpan.FromSeconds(2)));
 
         // Now deliver callback — must not throw or re-resolve
-        _dispatcher.Enqueue(SteamServersConnected_t.k_iCallback,
-            MakeBytes(new SteamServersConnected_t()));
-        _dispatcher.Tick(); // must not throw
+        CallbackDispatcher.InjectCallResultForTest(
+            1111, new SteamServersConnected_t(), ioFailed: false); // must not throw
     }
 
     // ── Timeout ───────────────────────────────────────────────────────────────
@@ -92,7 +105,6 @@ public sealed class CallResultAwaiterTests
     public async Task Timeout_FaultsWithSteamCallResultTimeoutException()
     {
         using var awaiter = CallResultAwaiter<SteamServersConnected_t>.Create(
-            _dispatcher,
             callHandle: 2222,
             timeout: TimeSpan.FromMilliseconds(50));
 
@@ -108,28 +120,17 @@ public sealed class CallResultAwaiterTests
     public async Task DoubleDelivery_OnlySettlesOnce()
     {
         using var awaiter = CallResultAwaiter<SteamServersConnected_t>.Create(
-            _dispatcher, callHandle: 3333);
+            callHandle: 3333);
 
-        var data = MakeBytes(new SteamServersConnected_t());
-
-        // Deliver twice
-        _dispatcher.Enqueue(SteamServersConnected_t.k_iCallback, data);
-        _dispatcher.Enqueue(SteamServersConnected_t.k_iCallback, data);
-        _dispatcher.Tick();
+        // Deliver twice — second should be a no-op (handle was removed after first)
+        CallbackDispatcher.InjectCallResultForTest(
+            3333, new SteamServersConnected_t(), ioFailed: false);
+        CallbackDispatcher.InjectCallResultForTest(
+            3333, new SteamServersConnected_t(), ioFailed: false);
 
         // Task must complete exactly once without faulting
         var result = await awaiter.Task.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.NotNull((object?)result);
         Assert.True(awaiter.Task.IsCompletedSuccessfully);
-    }
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private static unsafe byte[] MakeBytes<T>(T value) where T : unmanaged
-    {
-        var bytes = new byte[sizeof(T)];
-        fixed (byte* ptr = bytes)
-            *(T*)ptr = value;
-        return bytes;
     }
 }

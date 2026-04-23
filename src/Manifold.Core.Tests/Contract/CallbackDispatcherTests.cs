@@ -1,67 +1,75 @@
-// Manifold — CallbackDispatcher contract tests
+// Manifold — CallbackDispatcher contract tests (MASTER_DESIGN §7.1)
+//
+// CallbackDispatcher is now an internal static class. Tests exercise it via:
+//   - CallbackDispatcher.Register / Subscribe / Unregister
+//   - CallbackDispatcher.InjectForTest  — bypasses ManualDispatch; routes directly to handlers
+//   - CallbackDispatcher.ResetForTesting — isolates state between tests
 
 using System;
-using System.Collections.Generic;
-using System.Threading;
+using System.Runtime.InteropServices;
 using Manifold.Core.Dispatch;
 using Manifold.Core.Interop;
 using Xunit;
 
 namespace Manifold.Core.Tests.Contract;
 
-public sealed class CallbackDispatcherTests
+public sealed class CallbackDispatcherTests : IDisposable
 {
-    private readonly CallbackDispatcher _dispatcher = new();
+    public CallbackDispatcherTests()  => CallbackDispatcher.ResetForTesting();
+    public void Dispose()             => CallbackDispatcher.ResetForTesting();
 
-    // ── Basic subscribe + dispatch ────────────────────────────────────────────
+    // ── Basic subscribe + inject ───────────────────────────────────────────────
 
     [Fact]
-    public void Subscribe_AndEnqueue_DispatchesCallback()
+    public unsafe void Subscribe_AndInject_DispatchesCallback()
     {
         SteamServersConnected_t? received = null;
-        _dispatcher.Subscribe<SteamServersConnected_t>(cb => received = cb);
+        using var _ = CallbackDispatcher.Subscribe<SteamServersConnected_t>(cb => received = cb);
 
-        var data = MakeBytes<SteamServersConnected_t>(new SteamServersConnected_t());
-        _dispatcher.Enqueue(SteamServersConnected_t.k_iCallback, data);
-        _dispatcher.Tick();
+        var value = new SteamServersConnected_t();
+        CallbackDispatcher.InjectForTest(
+            SteamServersConnected_t.k_iCallback,
+            new IntPtr(&value));
 
         Assert.NotNull(received);
     }
 
     [Fact]
-    public void UnknownCallbackId_IsIgnored()
+    public unsafe void UnknownCallbackId_IsIgnored()
     {
-        // Enqueue with an id no one is subscribed to — should not throw
-        _dispatcher.Enqueue(99999, new byte[8]);
-        _dispatcher.Tick(); // must not throw
+        var value = new SteamServersConnected_t();
+        // Should not throw
+        CallbackDispatcher.InjectForTest(99999, new IntPtr(&value));
     }
 
     [Fact]
-    public void MultipleSubscribers_SameCallback_BothFire()
+    public unsafe void MultipleSubscribers_SameCallback_BothFire()
     {
         int count = 0;
-        _dispatcher.Subscribe<SteamServersConnected_t>(_ => count++);
-        _dispatcher.Subscribe<SteamServersConnected_t>(_ => count++);
+        using var a = CallbackDispatcher.Subscribe<SteamServersConnected_t>(_ => count++);
+        using var b = CallbackDispatcher.Subscribe<SteamServersConnected_t>(_ => count++);
 
-        var data = MakeBytes<SteamServersConnected_t>(new SteamServersConnected_t());
-        _dispatcher.Enqueue(SteamServersConnected_t.k_iCallback, data);
-        _dispatcher.Tick();
+        var value = new SteamServersConnected_t();
+        CallbackDispatcher.InjectForTest(
+            SteamServersConnected_t.k_iCallback,
+            new IntPtr(&value));
 
         Assert.Equal(2, count);
     }
 
-    // ── Unsubscribe (dispose token) ───────────────────────────────────────────
+    // ── Unsubscribe (dispose token) ────────────────────────────────────────────
 
     [Fact]
-    public void Dispose_Token_UnsubscribesHandler()
+    public unsafe void DisposeToken_UnsubscribesHandler()
     {
         int count = 0;
-        var token = _dispatcher.Subscribe<SteamServersConnected_t>(_ => count++);
+        var token = CallbackDispatcher.Subscribe<SteamServersConnected_t>(_ => count++);
         token.Dispose();
 
-        var data = MakeBytes<SteamServersConnected_t>(new SteamServersConnected_t());
-        _dispatcher.Enqueue(SteamServersConnected_t.k_iCallback, data);
-        _dispatcher.Tick();
+        var value = new SteamServersConnected_t();
+        CallbackDispatcher.InjectForTest(
+            SteamServersConnected_t.k_iCallback,
+            new IntPtr(&value));
 
         Assert.Equal(0, count);
     }
@@ -69,59 +77,45 @@ public sealed class CallbackDispatcherTests
     [Fact]
     public void DoubleDispose_Token_IsIdempotent()
     {
-        var token = _dispatcher.Subscribe<SteamServersConnected_t>(_ => { });
+        var token = CallbackDispatcher.Subscribe<SteamServersConnected_t>(_ => { });
         token.Dispose();
         token.Dispose(); // must not throw
     }
 
-    // ── CancelAll ─────────────────────────────────────────────────────────────
+    // ── CancelAll ──────────────────────────────────────────────────────────────
 
     [Fact]
-    public void CancelAll_PreventsDispatch()
+    public unsafe void CancelAll_PreventsSubsequentDispatch()
     {
         int count = 0;
-        _dispatcher.Subscribe<SteamServersConnected_t>(_ => count++);
+        using var _ = CallbackDispatcher.Subscribe<SteamServersConnected_t>(_ => count++);
 
-        var data = MakeBytes<SteamServersConnected_t>(new SteamServersConnected_t());
-        _dispatcher.Enqueue(SteamServersConnected_t.k_iCallback, data);
+        CallbackDispatcher.CancelAll(new InvalidOperationException("test"));
 
-        _dispatcher.CancelAll();
-        _dispatcher.Tick(); // queue was drained, handlers removed
+        var value = new SteamServersConnected_t();
+        CallbackDispatcher.InjectForTest(
+            SteamServersConnected_t.k_iCallback,
+            new IntPtr(&value));
 
         Assert.Equal(0, count);
     }
 
-    [Fact]
-    public void CancelAll_DrainsPendingQueue()
-    {
-        _dispatcher.Enqueue(1, new byte[4]);
-        _dispatcher.Enqueue(2, new byte[4]);
-        _dispatcher.CancelAll();
-
-        // Tick should process nothing
-        int count = 0;
-        _dispatcher.Subscribe<SteamServersConnected_t>(_ => count++);
-        _dispatcher.Tick();
-
-        Assert.Equal(0, count);
-    }
-
-    // ── Data integrity ────────────────────────────────────────────────────────
+    // ── Data integrity ─────────────────────────────────────────────────────────
 
     [Fact]
     public unsafe void StructFields_AreMarshalledCorrectly()
     {
         SteamServerConnectFailure_t? received = null;
-        _dispatcher.Subscribe<SteamServerConnectFailure_t>(cb => received = cb);
+        using var _ = CallbackDispatcher.Subscribe<SteamServerConnectFailure_t>(cb => received = cb);
 
         var original = new SteamServerConnectFailure_t
         {
-            m_eResult = 42,
+            m_eResult        = 42,
             m_bStillRetrying = true
         };
-        var data = MakeBytes(original);
-        _dispatcher.Enqueue(SteamServerConnectFailure_t.k_iCallback, data);
-        _dispatcher.Tick();
+        CallbackDispatcher.InjectForTest(
+            SteamServerConnectFailure_t.k_iCallback,
+            new IntPtr(&original));
 
         Assert.NotNull(received);
         Assert.Equal(42, received!.Value.m_eResult);
@@ -134,17 +128,7 @@ public sealed class CallbackDispatcherTests
     public void Subscribe_StructWithoutCallbackId_ThrowsInvalidOperation()
     {
         Assert.Throws<InvalidOperationException>(() =>
-            _dispatcher.Subscribe<BadStruct>(_ => { }));
-    }
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private static unsafe byte[] MakeBytes<T>(T value) where T : unmanaged
-    {
-        var bytes = new byte[sizeof(T)];
-        fixed (byte* ptr = bytes)
-            *(T*)ptr = value;
-        return bytes;
+            CallbackDispatcher.Subscribe<BadStruct>(_ => { }));
     }
 
     private struct BadStruct { public int X; } // no k_iCallback
