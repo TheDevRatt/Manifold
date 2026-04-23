@@ -63,7 +63,11 @@ internal readonly struct PacketHeader
     /// </summary>
     /// <param name="source">Source buffer; must be at least 2 bytes.</param>
     /// <param name="header">The decoded header on success; default on failure.</param>
-    /// <returns><c>true</c> if successful; <c>false</c> if the buffer is too short.</returns>
+    /// <returns>
+    /// <c>true</c> if successful; <c>false</c> if the buffer is too short,
+    /// the version nibble is non-zero (unknown future protocol), or
+    /// the kind nibble is a reserved value (0x4–0xF).
+    /// </returns>
     public static bool TryDecode(ReadOnlySpan<byte> source, out PacketHeader header)
     {
         if (source.Length < Size)
@@ -75,6 +79,23 @@ internal readonly struct PacketHeader
         byte version = (byte)(source[0] >> 4);
         var  kind    = (PacketKind)(source[0] & 0x0F);
         byte channel = source[1];
+
+        // Reject future protocol versions — we can only safely process version 0.
+        // A peer sending version > 0 is speaking a protocol we don't understand.
+        if (version != 0)
+        {
+            header = default;
+            return false;
+        }
+
+        // Reject reserved/unknown packet kinds (0x4–0xF).
+        // Silently dropping unknown kinds on receive is safer than processing garbage.
+        if (kind > PacketKind.Disconnect)
+        {
+            header = default;
+            return false;
+        }
+
         header = new PacketHeader(kind, channel, version);
         return true;
     }

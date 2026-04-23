@@ -4,7 +4,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 using Manifold.Core.Interop;
@@ -27,6 +26,10 @@ internal static class CallbackDispatcher
 
     private record CallResultRegistration(Action<IntPtr, bool> Handler, int ExpectedCallbackId, int DataSize);
     private static readonly Dictionary<ulong, CallResultRegistration> _callResults = new();
+
+    // Set by CancelAll (Dispose path) to signal Tick to exit early.
+    // Prevents SteamAPI_FreeLastCallback on a shut-down pipe.
+    private static volatile bool _shutdownRequested;
 
     // ── Properties ────────────────────────────────────────────────────────────
 
@@ -99,25 +102,25 @@ internal static class CallbackDispatcher
     }
 
     /// <summary>
-    /// Clears all handler registrations and pending call result entries.
+    /// Clears all handler registrations and pending call-result entries.
+    /// Faults all pending <see cref="CallResultAwaiter"/> TCS objects with
+    /// <paramref name="reason"/>. Raw <see cref="Action{T1,T2}"/> handlers are
+    /// NOT invoked to avoid null-pointer dereference by future non-TCS consumers.
     /// Called by <see cref="SteamLifecycle"/> during Dispose.
     /// </summary>
     internal static void CancelAll(Exception reason)
     {
-        List<(CallResultRegistration, ulong)> pending;
+        _shutdownRequested = true;  // signal Tick to exit early if mid-loop
         lock (_lock)
         {
-            pending = _callResults.Select(kv => (kv.Value, kv.Key)).ToList();
             _handlers.Clear();
             _callResults.Clear();
         }
-        // Fault all CallResultAwaiter TCS objects with the supplied reason
+        // Fault all CallResultAwaiter TCS objects with the supplied reason.
+        // This is the only notification needed — raw Action<IntPtr, bool> handlers
+        // are NOT invoked with IntPtr.Zero because future non-TCS consumers
+        // could dereference a null pointer.
         CallResultAwaiter.CancelAll(reason);
-
-        // Also invoke the raw Action<IntPtr, bool> handlers with ioFailed=true so
-        // any non-TCS consumers (future use) also receive a failure signal.
-        foreach (var (reg, _) in pending)
-            reg.Handler(IntPtr.Zero, true);
     }
 
     // ── Per-frame pump ────────────────────────────────────────────────────────
@@ -139,7 +142,8 @@ internal static class CallbackDispatcher
         DebugAssertMainThread();
         SteamNative.SteamAPI_ManualDispatch_RunFrame(hSteamPipe);
 
-        while (SteamNative.SteamAPI_ManualDispatch_GetNextCallback(hSteamPipe, out var msg))
+        while (!_shutdownRequested &&
+               SteamNative.SteamAPI_ManualDispatch_GetNextCallback(hSteamPipe, out var msg))
         {
             try
             {
@@ -248,6 +252,7 @@ internal static class CallbackDispatcher
     /// <summary>Resets all static state. For test isolation only.</summary>
     internal static void ResetForTesting()
     {
+        _shutdownRequested = false;
         lock (_lock)
         {
             _handlers.Clear();

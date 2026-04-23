@@ -27,6 +27,9 @@ internal sealed class SteamNetworkingCore : IDisposable
     private uint _listenSocket;  // HSteamListenSocket
     private uint _pollGroup;     // HSteamNetPollGroup
 
+    // Host-only: set of accepted connection handles (CloseListenSocket doesn't cascade)
+    private readonly System.Collections.Generic.HashSet<uint> _acceptedConnections = new();
+
     // Client-only
     private uint _serverConnection;  // HSteamNetConnection to the server
 
@@ -113,6 +116,7 @@ internal sealed class SteamNetworkingCore : IDisposable
             "AcceptAndTrack must only be called in host mode. _isHost is false.");
         _backend.AcceptConnection(connection);
         _backend.SetConnectionPollGroup(connection, _pollGroup);
+        _acceptedConnections.Add(connection);  // track for cleanup on Close()
     }
 
     // ── Send ──────────────────────────────────────────────────────────────────
@@ -162,7 +166,10 @@ internal sealed class SteamNetworkingCore : IDisposable
     /// Closes a specific connection.
     /// </summary>
     internal void CloseConnection(uint connection, int reason = 0, string? debugMsg = null, bool linger = false)
-        => _backend.CloseConnection(connection, reason, debugMsg, linger);
+    {
+        _acceptedConnections.Remove(connection);  // no longer needs Close() cascade
+        _backend.CloseConnection(connection, reason, debugMsg, linger);
+    }
 
     /// <summary>
     /// Closes all connections and releases host resources (listen socket + poll group).
@@ -175,6 +182,11 @@ internal sealed class SteamNetworkingCore : IDisposable
 
         if (_isHost)
         {
+            // Close all accepted connections first — CloseListenSocket does NOT cascade.
+            foreach (var conn in _acceptedConnections)
+                _backend.CloseConnection(conn, 0, null, false);
+            _acceptedConnections.Clear();
+
             _backend.CloseListenSocket(_listenSocket);
             _backend.DestroyPollGroup(_pollGroup);
             _listenSocket = 0;

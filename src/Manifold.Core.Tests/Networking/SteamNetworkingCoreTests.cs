@@ -115,6 +115,23 @@ public class SteamNetworkingCoreTests
         Assert.Contains(nameof(FakeSteamBackend.CloseConnection), fake.CallLog);
     }
 
+    // ── Close (host with accepted connections) ─────────────────────────────────
+
+    [Fact]
+    public void Close_Host_ClosesAcceptedConnections_BeforeListenSocket()
+    {
+        var core = MakeCore(out var fake);
+        core.CreateHost();
+        core.AcceptAndTrack(connection: 99);
+        core.Close();
+        // CloseConnection(99) must appear before CloseListenSocket in the call log
+        var log = fake.CallLog;
+        int closeConnIdx   = log.IndexOf("CloseConnection");
+        int closeSocketIdx = log.IndexOf("CloseListenSocket");
+        Assert.True(closeConnIdx >= 0, "CloseConnection should have been called");
+        Assert.True(closeConnIdx < closeSocketIdx, "CloseConnection must precede CloseListenSocket");
+    }
+
     // ── Close (host) ───────────────────────────────────────────────────────────
 
     [Fact]

@@ -50,6 +50,15 @@ public class SteamPeerRegistryTests
         Assert.Equal(1, peer.DisconnectCount);
     }
 
+    [Fact]
+    public void Register_AfterShutdownAll_ImmediatelyDisconnects()
+    {
+        SteamPeerRegistry.ShutdownAll();
+        var peer = new FakePeer();
+        SteamPeerRegistry.Register(peer);
+        Assert.True(peer.Disconnected); // ForceDisconnect called immediately
+    }
+
     private sealed class FakePeer : ISteamPeer
     {
         public bool Disconnected   => DisconnectCount > 0;

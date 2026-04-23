@@ -191,14 +191,32 @@ public class PacketHeaderTests
     }
 
     [Fact]
-    public void KindIsCorrectlyMasked_WhenDecodingUpperNibble()
+    public void TryDecode_NonZeroVersion_ReturnsFalse()
     {
-        // byte0 = 0x51  →  version=5, kind=Handshake(0x1)
-        ReadOnlySpan<byte> buf = stackalloc byte[] { 0x51, 0x00 };
-        bool ok = PacketHeader.TryDecode(buf, out var header);
+        // version=5 in upper nibble — not protocol version 0, must be rejected
+        Span<byte> buf = stackalloc byte[2];
+        buf[0] = 0x51; // version=5, kind=Handshake
+        buf[1] = 0x00;
+        Assert.False(PacketHeader.TryDecode(buf, out _));
+    }
 
-        Assert.True(ok);
-        Assert.Equal(5, header.Version);
-        Assert.Equal(PacketKind.Handshake, header.Kind);
+    [Fact]
+    public void TryDecode_ReservedKind_ReturnsFalse()
+    {
+        // kind=0x4 is reserved — must be rejected
+        Span<byte> buf = stackalloc byte[2];
+        buf[0] = 0x04; // version=0, kind=0x4 (reserved)
+        buf[1] = 0x00;
+        Assert.False(PacketHeader.TryDecode(buf, out _));
+    }
+
+    [Fact]
+    public void TryDecode_MaxReservedKind_ReturnsFalse()
+    {
+        // kind=0xF is reserved
+        Span<byte> buf = stackalloc byte[2];
+        buf[0] = 0x0F; // version=0, kind=0xF (reserved)
+        buf[1] = 0x00;
+        Assert.False(PacketHeader.TryDecode(buf, out _));
     }
 }

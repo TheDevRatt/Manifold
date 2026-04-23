@@ -19,9 +19,19 @@ internal static class SteamPeerRegistry
     private static readonly List<WeakReference<ISteamPeer>> _peers = new();
     private static readonly object _lock = new();
 
+    // Set to true once ShutdownAll begins; prevents any new peer from becoming active.
+    private static volatile bool _isShuttingDown;
+
     /// <summary>Registers a peer for shutdown notification.</summary>
     internal static void Register(ISteamPeer peer)
     {
+        if (_isShuttingDown)
+        {
+            // ShutdownAll already ran — immediately disconnect any late registrant.
+            try { peer.ForceDisconnect(); }
+            catch { /* swallow */ }
+            return;
+        }
         lock (_lock)
             _peers.Add(new WeakReference<ISteamPeer>(peer));
     }
@@ -40,6 +50,7 @@ internal static class SteamPeerRegistry
     /// </summary>
     internal static void ShutdownAll()
     {
+        _isShuttingDown = true;  // set BEFORE acquiring lock and clearing
         List<ISteamPeer> alive;
         lock (_lock)
         {
@@ -58,6 +69,7 @@ internal static class SteamPeerRegistry
     /// <summary>Resets all registrations. For testing only.</summary>
     internal static void ResetForTesting()
     {
+        _isShuttingDown = false;  // reset for test isolation
         lock (_lock) _peers.Clear();
     }
 }

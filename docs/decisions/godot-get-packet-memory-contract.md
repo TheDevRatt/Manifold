@@ -163,3 +163,25 @@ public override Error _GetPacket(out byte[] rBuffer, out int rBufferSize)
 a complex lifecycle that is error-prone and not supported by the `_GetPacket` API contract.
 The persistent buffer approach is simpler, equally allocation-free, and aligned with how
 the engine's own built-in peers work.
+
+## Implementation Note (Phase 2)
+
+The original fallback strategy recommended in this document (persistent 1 MB buffer per peer)
+was not adopted. Instead, `_GetPacketScript` allocates a fresh `byte[]` of exactly `pkt.Size`
+bytes per packet. This is correct for the C# path:
+
+- `_GetPacketScript()` returns a managed `byte[]` to Godot.
+- Godot holds a managed GC reference, not a raw `uint8_t*` pointer.
+- The fresh `byte[]` stays alive as long as Godot holds the reference.
+- The ArrayPool-rented internal buffer (`ReceivedPacket.Buffer`) is returned to the pool
+  immediately after the copy, before `_GetPacketScript` returns.
+
+The concern documented above applies only to GDExtension C++ virtuals (`_GetPacket`), which
+receive a `const uint8_t**` output pointer and a size — those hold the raw pointer past the
+call. Manifold uses the C# `_GetPacketScript` override exclusively, so the pointer concern
+does not apply.
+
+**Current strategy:** One fresh `new byte[payloadSize]` allocation per received data packet.
+This is a known hot-path allocation for high-frequency packet scenarios. An ArrayPool-based
+optimization (renting a buffer, returning it after Godot copies) is a future optimization
+tracked in the Phase 3 backlog.
