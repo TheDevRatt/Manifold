@@ -84,7 +84,7 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension
     // ── Incoming packet queue ─────────────────────────────────────────────────
 
     private readonly Queue<ReceivedPacket> _incoming = new();
-    private ReceivedPacket _currentPacket;  // set during _GetPacket, used by _GetPacketPeer etc.
+    private ReceivedPacket _currentPacket;  // set during _GetPacketScript, used by _GetPacketPeer etc.
 
     // ── Disconnect info ───────────────────────────────────────────────────────
 
@@ -278,23 +278,13 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension
         CancellationToken cancellationToken = default)
         => Task.FromResult(Error.Unavailable); // cancellationToken intentionally unused until Phase 3
 
-    // ── Persistent receive buffer ─────────────────────────────────────────────
-
-    /// <summary>
-    /// Persistent receive buffer — allocated once on first use, reused every frame.
-    /// Godot holds a raw pointer after <see cref="_GetPacket"/> returns, so the buffer
-    /// must stay alive for the lifetime of the peer.
-    /// See: docs/decisions/godot-get-packet-memory-contract.md (Task 6).
-    /// </summary>
-    private byte[]? _packetBuffer;
-
     // ── Steam send-flag constants (MASTER_DESIGN §8.2) ────────────────────────
 
     private const int k_nSteamNetworkingSend_Unreliable        = 0;
     private const int k_nSteamNetworkingSend_NoDelay           = 4;
     private const int k_nSteamNetworkingSend_NoNagle           = 1;
     private const int k_nSteamNetworkingSend_Reliable          = 8;
-    private const int k_nSteamNetworkingSend_UnreliableNoDelay = 5; // NoDelay | NoNagle
+    private const int k_nSteamNetworkingSend_UnreliableNoDelay = 5; // Unreliable | NoDelay | NoNagle (= 0 | 4 | 1 = 5)
 
     // ── Handshake tracking (Task 14 will fully populate) ─────────────────────
 
@@ -315,7 +305,7 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension
             switch (pkt.Kind)
             {
                 case PacketKind.Data:
-                    // Buffer stays alive — payload will be copied in _GetPacket into _packetBuffer
+                    // Buffer stays alive — payload will be copied in _GetPacketScript
                     _incoming.Enqueue(pkt);
                     break;
 
@@ -394,12 +384,9 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension
         _currentPacket = pkt;
 
         // Note: Task 6 (docs/decisions/godot-get-packet-memory-contract.md) warns that Godot
-        // holds a raw pointer after _GetPacket returns — that concern applies to the GDExtension
+        // holds a raw pointer after _GetPacketScript returns — that concern applies to the GDExtension
         // C++ virtual, not this C# _GetPacketScript() override, where Godot holds a managed GC
-        // reference to the returned byte[]. We allocate exactly the right size per packet here;
-        // _packetBuffer is kept as a scratch buffer for future optimization (e.g. pinned buffer).
-        _packetBuffer ??= new byte[_GetMaxPacketSize()];
-
+        // reference to the returned byte[]. We allocate exactly the right size per packet here.
         int payloadSize = pkt.Size;
         var result = new byte[payloadSize];
         if (payloadSize > 0)
@@ -511,6 +498,8 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension
             // Client disconnected from server
             _state = PeerState.Disconnected;
             LastDisconnectInfo = new DisconnectInfo { Code = 0, Reason = "Server disconnected", WasLocalClose = false };
+            EmitSignal(MultiplayerPeer.SignalName.PeerDisconnected, 1L);   // triggers Godot's server_disconnected
+            EmitSignalPeerDisconnectedWithReason(1, 0, "Server disconnected", wasLocal: false);
         }
     }
 
@@ -525,11 +514,13 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension
 
     // ── Core event handlers ───────────────────────────────────────────────────
 
+    /// <summary>Called by SteamNetworkingCore when a new incoming connection arrives (host only). Task 14 implements handshake initiation.</summary>
     private void OnIncomingConnection(uint connection)
     {
         // Task 14: handle handshake initiation (accept, register, send Handshake packet)
     }
 
+    /// <summary>Called by SteamNetworkingCore when a connection's status changes. Task 13 implements state transitions.</summary>
     private void OnConnectionStatusChanged(uint connection, int newState, int oldState, string debugMsg)
     {
         // Task 14: handle state transitions (connecting → connected, closed-by-peer, etc.)
