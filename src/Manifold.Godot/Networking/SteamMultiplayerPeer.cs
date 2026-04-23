@@ -256,20 +256,27 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension
     /// Creates a Steam lobby and immediately calls <see cref="CreateHost"/> on success.
     /// <para><b>Phase 3 stub</b>: returns <see cref="Error.Unavailable"/> until <c>SteamMatchmaking</c> is implemented.</para>
     /// </summary>
+    /// <param name="type">Lobby visibility (public, friends-only, private, etc.).</param>
+    /// <param name="maxMembers">Maximum number of members the lobby will accept.</param>
+    /// <param name="cancellationToken">Unused until Phase 3; reserved for future async cancellation.</param>
+    /// <returns><see cref="Error.Unavailable"/> always (Phase 3 stub).</returns>
     public Task<Error> HostWithLobbyAsync(
         ELobbyType type,
         int maxMembers,
         CancellationToken cancellationToken = default)
-        => Task.FromResult(Error.Unavailable);
+        => Task.FromResult(Error.Unavailable); // cancellationToken intentionally unused until Phase 3
 
     /// <summary>
     /// Joins a Steam lobby and immediately calls <see cref="CreateClient"/> using the lobby owner's Steam ID.
     /// <para><b>Phase 3 stub</b>: returns <see cref="Error.Unavailable"/> until <c>SteamMatchmaking</c> is implemented.</para>
     /// </summary>
+    /// <param name="lobbyId">The Steam64 ID of the lobby to join.</param>
+    /// <param name="cancellationToken">Unused until Phase 3; reserved for future async cancellation.</param>
+    /// <returns><see cref="Error.Unavailable"/> always (Phase 3 stub).</returns>
     public Task<Error> JoinLobbyAsync(
         SteamId lobbyId,
         CancellationToken cancellationToken = default)
-        => Task.FromResult(Error.Unavailable);
+        => Task.FromResult(Error.Unavailable); // cancellationToken intentionally unused until Phase 3
 
     // ── Core event handlers (Tasks 13-14 will fill these in) ─────────────────
 
