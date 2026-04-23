@@ -79,3 +79,42 @@ internal static partial class SteamNative
         int nOptions,
         IntPtr pOptions);
 }
+
+/// <summary>
+/// Steam networking message struct. Pack=1 (explicitly packed in SDK steamnetworkingtypes.h).
+/// Obtained from ReceiveMessagesOnConnection / ReceiveMessagesOnPollGroup as a raw pointer.
+/// Must call <see cref="Release"/> after consuming m_pData to free the Steam-owned buffer.
+/// (Steamworks SDK 1.64 steamnetworkingtypes.h)
+/// </summary>
+[System.Runtime.InteropServices.StructLayout(
+    System.Runtime.InteropServices.LayoutKind.Sequential, Pack = 1)]
+internal unsafe struct SteamNetworkingMessage_t
+{
+    internal System.IntPtr m_pData;         // pointer to message payload
+    internal int           m_cbSize;        // payload size in bytes
+    internal uint          m_conn;          // HSteamNetConnection — sender
+    // SteamNetworkingIdentity m_identitySender — 136 bytes, skip via padding
+    private fixed byte     _identityPad[136];
+    internal long          m_nConnUserData;
+    internal long          m_usecTimeReceived;
+    internal long          m_nMessageNumber;
+    internal System.IntPtr m_pfnFreeData;
+    internal System.IntPtr m_pfnRelease;    // call this to free the message
+    internal int           m_nChannel;
+    internal int           m_idxLane;
+    internal int           m_pad;
+
+    /// <summary>
+    /// Releases this message and its data buffer back to the Steam library.
+    /// Must be called exactly once after the message data has been consumed.
+    /// </summary>
+    internal unsafe void Release()
+    {
+        if (m_pfnRelease != System.IntPtr.Zero)
+        {
+            var fn = (delegate* unmanaged[Cdecl]<System.IntPtr, void>)m_pfnRelease;
+            fixed (SteamNetworkingMessage_t* self = &this)
+                fn((System.IntPtr)self);
+        }
+    }
+}

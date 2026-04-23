@@ -359,22 +359,12 @@ internal unsafe struct SteamNetConnectionRealTimeLaneStatus_t
 }
 
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
-internal unsafe struct SteamNetworkingMessage_t
+// SteamNetworkingMessage_t — SUPERSEDED by hand-written definition in SteamNative.Manual.cs.
+// The auto-generated layout was incomplete (skipped function-pointer fields, wrong identity padding).
+// See SteamNative.Manual.cs for the correct Pack=1 definition with Release() support.
+internal unsafe struct SteamNetworkingMessage_t_AutoGenSkipped
 {
-    internal IntPtr m_pData;
-    internal int m_cbSize;
-    internal uint m_conn;
-    internal IntPtr m_identityPeer;
-    internal long m_nConnUserData;
-    internal long m_usecTimeReceived;
-    internal long m_nMessageNumber;
-    // SKIPPED: void (*)(SteamNetworkingMessage_t *) m_pfnFreeData
-    // SKIPPED: void (*)(SteamNetworkingMessage_t *) m_pfnRelease
-    internal int m_nChannel;
-    internal int m_nFlags;
-    internal long m_nUserData;
-    internal ushort m_idxLane;
-    internal ushort _pad1__;
+    internal IntPtr m_pData_unused;
 }
 
 #if MANIFOLD_PACK_SMALL
