@@ -111,7 +111,11 @@ internal static class CallbackDispatcher
             _handlers.Clear();
             _callResults.Clear();
         }
-        // Notify call result handlers of shutdown failure (ioFailed=true)
+        // Fault all CallResultAwaiter TCS objects with the supplied reason
+        CallResultAwaiter.CancelAll(reason);
+
+        // Also invoke the raw Action<IntPtr, bool> handlers with ioFailed=true so
+        // any non-TCS consumers (future use) also receive a failure signal.
         foreach (var (reg, _) in pending)
             reg.Handler(IntPtr.Zero, true);
     }
