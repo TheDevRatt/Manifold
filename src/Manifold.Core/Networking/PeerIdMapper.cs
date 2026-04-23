@@ -84,6 +84,22 @@ internal sealed class PeerIdMapper
     internal bool TryGetConnection(int godotId, out uint connection)
         => _godotToConn.TryGetValue(godotId, out connection);
 
+    /// <summary>
+    /// Registers a peer with an explicit Godot peer ID (used to register the server as peer 1 on the client).
+    /// Throws if the SteamId is already registered.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">If <paramref name="steamId"/> is already registered.</exception>
+    internal void RegisterWithId(SteamId steamId, uint connection, int godotId)
+    {
+        if (_steamToGodot.ContainsKey(steamId))
+            throw new InvalidOperationException($"SteamId {steamId} is already registered.");
+        _steamToGodot[steamId]   = godotId;
+        _godotToSteam[godotId]   = steamId;
+        _connToGodot[connection] = godotId;
+        _godotToConn[godotId]    = connection;
+        // Don't increment _nextId — explicit ID registration bypasses auto-assignment
+    }
+
     /// <summary>Enumerates all registered (connection, godotId) pairs.</summary>
     internal IEnumerable<(uint Connection, int GodotId)> GetAllConnections()
     {

@@ -164,7 +164,12 @@ internal static class CallbackDispatcher
                             SteamNative.SteamAPI_ManualDispatch_GetAPICallResult(
                                 hSteamPipe, apiCallHandle, (IntPtr)pBuf,
                                 reg.DataSize, reg.ExpectedCallbackId, out bool ioFailed);
-                            reg.Handler((IntPtr)pBuf, ioFailed);
+                            try { reg.Handler((IntPtr)pBuf, ioFailed); }
+                            catch (Exception)
+                            {
+                                // Handler exceptions are swallowed to prevent one subscriber from aborting the frame pump.
+                                // Callers should handle exceptions within their own handlers.
+                            }
                         }
                     }
                 }
@@ -178,7 +183,14 @@ internal static class CallbackDispatcher
                     }
                     if (snapshot is not null)
                         foreach (var h in snapshot)
-                            h(msg.m_pubParam);
+                        {
+                            try { h(msg.m_pubParam); }
+                            catch (Exception)
+                            {
+                                // Handler exceptions are swallowed to prevent one subscriber from aborting the frame pump.
+                                // Callers should handle exceptions within their own handlers.
+                            }
+                        }
                 }
             }
             finally
@@ -203,7 +215,11 @@ internal static class CallbackDispatcher
                 snapshot = list.ToArray();
         }
         if (snapshot is null) return;
-        foreach (var h in snapshot) h(data);
+        foreach (var h in snapshot)
+        {
+            try { h(data); }
+            catch (Exception) { /* swallow — one bad handler must not abort the test-injection loop */ }
+        }
     }
 
     /// <summary>

@@ -5,6 +5,7 @@
 
 using Godot;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Manifold.Core;
@@ -108,10 +109,15 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension, ISteamPeer
     // ── Constructor ───────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Creates a <see cref="SteamMultiplayerPeer"/> using a stub backend.
-    /// Production use requires the live Steam backend to be wired in (see TODO below).
-    /// Use the internal <c>(INetworkingBackend)</c> overload for direct test injection.
+    /// Creates a <see cref="SteamMultiplayerPeer"/> that is <b>not connected to Steam</b>.
+    /// This constructor uses <see cref="FakeSteamBackend"/> as a placeholder — all networking
+    /// operations will silently no-op. Production use requires the internal
+    /// <c>(INetworkingBackend)</c> overload with a live backend once Phase 3 wires
+    /// <c>SteamLifecycle</c> into the construction path.
     /// </summary>
+    /// <remarks>
+    /// <b>This constructor is test-only until Phase 3.</b>
+    /// </remarks>
     public SteamMultiplayerPeer()
     {
         _core = new SteamNetworkingCore(new FakeSteamBackend());
@@ -324,6 +330,16 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension, ISteamPeer
                     if (HandshakeProtocol.TryParseHandshake(pkt.Buffer.AsSpan(0, spanLen), out int peerId))
                     {
                         _uniqueId = peerId;
+
+                        // Register the server (peer ID 1) in the mapper so _GetPacketPeer() works.
+                        // The server's SteamId is obtained from the connection info.
+                        var serverSteamId = _core.GetRemoteSteamId(_core.ServerConnection);
+                        if (serverSteamId.IsValid)
+                        {
+                            try { _peerMapper.RegisterWithId(serverSteamId, _core.ServerConnection, godotId: 1); }
+                            catch (InvalidOperationException) { /* already registered */ }
+                        }
+
                         var ack = HandshakeProtocol.BuildAck();
                         _core.SendTo(_core.ServerConnection, ack, k_nSteamNetworkingSend_Reliable);
                         _state = PeerState.Connected;
@@ -375,11 +391,22 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension, ISteamPeer
 
         if (_targetPeer <= 0)
         {
-            // 0 = broadcast; negative = all-except-one
-            foreach (var (conn, godotId) in _peerMapper.GetAllConnections())
+            if (_isServer)
             {
-                if (_targetPeer == 0 || godotId != -_targetPeer)
-                    _core.SendTo(conn, outBuf, sendFlags);
+                // Host: broadcast to all connected peers, or all-except-one
+                foreach (var (conn, godotId) in _peerMapper.GetAllConnections())
+                {
+                    if (_targetPeer == 0 || godotId != -_targetPeer)
+                        _core.SendTo(conn, outBuf, sendFlags);
+                }
+            }
+            else
+            {
+                // Client: the only remote peer is the server (peer ID 1).
+                // Broadcast (0) and all-except(-n != 1) both go to the server.
+                // _peerMapper is empty on clients — never iterate it for sends.
+                if (_targetPeer == 0 || -_targetPeer != 1)
+                    _core.SendTo(_core.ServerConnection, outBuf, sendFlags);
             }
         }
         else
@@ -439,6 +466,24 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension, ISteamPeer
         SteamPeerRegistry.Unregister(this);
         _state = PeerState.Disconnecting;
 
+        // Emit PeerDisconnected for every connected peer BEFORE clearing state.
+        // Godot's MultiplayerAPI needs these signals to clean up remote nodes.
+        if (_isServer)
+        {
+            foreach (var (_, godotId) in _peerMapper.GetAllConnections().ToList())
+            {
+                EmitSignal(MultiplayerPeer.SignalName.PeerDisconnected, (long)godotId);
+                // Populate LastDisconnectInfo once (for the host's perspective)
+                LastDisconnectInfo = new DisconnectInfo { Code = 0, Reason = "Host closed", WasLocalClose = true };
+            }
+        }
+        else
+        {
+            // Client closing: emit server disconnect
+            EmitSignal(MultiplayerPeer.SignalName.PeerDisconnected, 1L);
+            LastDisconnectInfo = new DisconnectInfo { Code = 0, Reason = "Client closed", WasLocalClose = true };
+        }
+
         _core.Close();
         _peerMapper.Clear();
         _pendingHandshakes.Clear();
@@ -459,6 +504,7 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension, ISteamPeer
 
         if (!_peerMapper.TryGetConnection(pPeer, out uint conn)) return;
 
+        _pendingHandshakes.Remove(conn);  // prevent timeout from closing an already-closed handle
         _core.CloseConnection(conn, reason: 0, debugMsg: null, linger: !pForce);
         _peerMapper.Remove(pPeer);
         EmitSignal(MultiplayerPeer.SignalName.PeerDisconnected, (long)pPeer);
@@ -519,8 +565,16 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension, ISteamPeer
         }
         else if (!_isServer)
         {
-            // Client disconnected from server
+            // Client: server went away — clean up fully
+            SteamPeerRegistry.Unregister(this);
+            _core.Close();
+            _peerMapper.Clear();
+            _pendingHandshakes.Clear();
+            while (_incoming.Count > 0)
+                System.Buffers.ArrayPool<byte>.Shared.Return(_incoming.Dequeue().Buffer);
+
             _state = PeerState.Disconnected;
+            _uniqueId = 0;
             LastDisconnectInfo = new DisconnectInfo { Code = 0, Reason = "Server disconnected", WasLocalClose = false };
             EmitSignal(MultiplayerPeer.SignalName.PeerDisconnected, 1L);   // triggers Godot's server_disconnected
             EmitSignalPeerDisconnectedWithReason(1, 0, "Server disconnected", wasLocal: false);
