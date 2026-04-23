@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Manifold.Core.Dispatch;
 using Manifold.Core.Interop;
 using Manifold.Core.Lifecycle;
+using Manifold.Core.Testing;
 using Xunit;
 
 namespace Manifold.Core.Tests.Contract;
@@ -34,15 +35,7 @@ public sealed class SteamLifecycleTests : IDisposable
     /// </summary>
     private static void ResetStaticState()
     {
-        var type = typeof(SteamLifecycle);
-
-        var everField = type.GetField("_everInitialized",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-        everField?.SetValue(null, false);
-
-        var currentField = type.GetField("<Current>k__BackingField",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-        currentField?.SetValue(null, null);
+        SteamLifecycle.ResetForTesting();
     }
 
     // Helper: create a lifecycle and call InitializeCore on it, wiring up to _lifecycle.

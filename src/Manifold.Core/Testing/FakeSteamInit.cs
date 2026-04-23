@@ -2,8 +2,9 @@
 // Test double for ISteamInit — records calls, supports inject-on-Init failure.
 
 using System;
+using Manifold.Core.Lifecycle;
 
-namespace Manifold.Core.Lifecycle;
+namespace Manifold.Core.Testing;
 
 /// <summary>
 /// Test double for <see cref="ISteamInit"/>.
@@ -11,9 +12,16 @@ namespace Manifold.Core.Lifecycle;
 /// </summary>
 public sealed class FakeSteamInit : ISteamInit
 {
+    /// <summary>Number of times <see cref="Init"/> has been called.</summary>
     public int InitCalls { get; private set; }
+
+    /// <summary>Number of times <see cref="RunCallbacks"/> has been called.</summary>
     public int RunCallbacksCalls { get; private set; }
+
+    /// <summary>Number of times <see cref="Shutdown"/> has been called.</summary>
     public int ShutdownCalls { get; private set; }
+
+    /// <summary>Number of times <see cref="ManualDispatchInit"/> has been called.</summary>
     public int ManualDispatchInitCalls { get; private set; }
 
     /// <summary>

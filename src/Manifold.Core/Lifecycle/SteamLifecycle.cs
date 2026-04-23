@@ -39,9 +39,6 @@ public sealed class SteamLifecycle : IDisposable
     /// <summary>ManagedThreadId of the thread that called Initialize().</summary>
     private int _gameThreadId;
 
-    /// <summary>HSteamPipe captured after successful Init(), used for ManualDispatch.</summary>
-    private uint _hSteamPipe;
-
     // ── Public properties ─────────────────────────────────────────────────────
 
     /// <summary><c>true</c> after Initialize() succeeds and before Dispose().</summary>
@@ -151,7 +148,8 @@ public sealed class SteamLifecycle : IDisposable
             Thread.CurrentThread.ManagedThreadId == _gameThreadId,
             "RunCallbacks() must be called on the same thread as Initialize().");
 
-        _dispatcher.Tick();
+        _init.RunCallbacks();   // pump Steam backend (ManualDispatch or auto depending on mode)
+        _dispatcher.Tick();     // dispatch to C# handlers
     }
 
     // ── Disposal / shutdown ───────────────────────────────────────────────────
@@ -193,6 +191,16 @@ public sealed class SteamLifecycle : IDisposable
 
     // ── Internal helpers ──────────────────────────────────────────────────────
 
+    /// <summary>Resets static state for test isolation. Called by test teardown only.</summary>
+    internal static void ResetForTesting()
+    {
+        lock (_staticLock)
+        {
+            _everInitialized = false;
+            Current = null;
+        }
+    }
+
     private Result<SteamLifecycle> InternalInitialize(SteamInitOptions options)
     {
         Options       = options;
@@ -217,7 +225,6 @@ public sealed class SteamLifecycle : IDisposable
                 _init.ManualDispatchInit();
 
             // Populate properties
-            _hSteamPipe   = _init.GetHSteamPipe();
             AppId         = _init.GetAppId();
             LocalUser     = new SteamId(_init.GetLocalSteamId());
             IsInitialized = true;
