@@ -393,4 +393,69 @@ public class SteamNetworkingCoreTests
         var steamId = core.GetRemoteSteamId(connection: 1);
         Assert.Equal(fake.RemoteSteamId, steamId);
     }
+
+    // ── State Machine Integration Tests (MASTER_DESIGN §10 cat 3) ─────────────
+    //
+    // NOTE – SteamMultiplayerPeer full state-machine tests require a Godot
+    // headless runtime (GD.Print, SceneTree signals, etc.).  Those are planned
+    // for Task 18 (E2E).  Here we exercise the same logic at the
+    // SteamNetworkingCore level via FakeSteamBackend — no live Steam needed.
+    //
+    // NOTE – The following tests from the Task 15 spec are already covered by
+    // existing suites and are therefore NOT duplicated here:
+    //
+    //   • HandshakeState_ExpiresAfterTimeout
+    //     → HandshakeStateTests.HandshakeState_IsExpired_AfterTimeout
+    //       (src/Manifold.Core.Tests/Protocol/HandshakeProtocolTests.cs)
+    //
+    //   • HandshakeState_MarkComplete_PreventsExpiry
+    //     → HandshakeStateTests.HandshakeState_MarkComplete_PreventsExpiry
+    //       (same file)
+    //
+    //   • HandshakeProtocol_BuildAndParse_RoundTrips_PeerId
+    //     → HandshakeProtocolTests.BuildHandshake_ThenTryParse_RoundTrips (Theory)
+    //       (same file)
+    //
+    //   • HandshakeProtocol_BuildAck_IsRecognised
+    //     → HandshakeProtocolTests.IsAck_ValidAckPacket_ReturnsTrue +
+    //       HandshakeProtocolTests.IsAck_EmptyBuffer_ReturnsFalse
+    //       (same file)
+    //
+    //   • ProcessMessage_HandshakeAck_DecodesKindCorrectly
+    //     → SteamNetworkingCoreTests.ProcessMessage_ZeroPayload_ControlPacket_AddsToOutput
+    //       (this file, above)
+
+    /// <summary>
+    /// GetRemoteSteamId should proxy the value set on FakeSteamBackend —
+    /// explicit-ID variant that documents the FakeSteamBackend injection path.
+    /// </summary>
+    [Fact]
+    public void SteamNetworkingCore_GetRemoteSteamId_UsesFakeBackend()
+    {
+        var fake = new FakeSteamBackend();
+        fake.RemoteSteamId = new SteamId(99999UL);
+        var core = new SteamNetworkingCore(fake);
+        core.CreateHost();
+        var id = core.GetRemoteSteamId(connection: 1);
+        Assert.Equal(new SteamId(99999UL), id);
+    }
+
+    /// <summary>
+    /// When a client receives state 3 (Connected) the ConnectionStatusChanged
+    /// event must fire with that state — covering the client-side state-machine
+    /// transition that is absent from the host-centric tests above.
+    /// </summary>
+    [Fact]
+    public void SteamNetworkingCore_HandleConnectionStatusChanged_ClientConnecting_TransitionsState()
+    {
+        var core = MakeCore(out _);
+        core.CreateClient(new SteamId(1));
+        int? capturedState = null;
+        core.ConnectionStatusChanged += (c, ns, os, dbg) => capturedState = ns;
+
+        // State 3 = k_ESteamNetworkingConnectionState_Connected on client side
+        core.HandleConnectionStatusChanged(connection: 2, newState: 3, oldState: 1, debugMsg: "");
+
+        Assert.Equal(3, capturedState);
+    }
 }
