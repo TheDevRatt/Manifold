@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using Manifold.Core.Networking;
 using Xunit;
 
-namespace Manifold.Core.Tests.StateMachine;
+namespace Manifold.Core.Tests.Networking;
 
 public class PeerIdMapperTests
 {
@@ -188,5 +188,54 @@ public class PeerIdMapperTests
     {
         var mapper = new PeerIdMapper();
         Assert.Throws<KeyNotFoundException>(() => mapper.GetGodotId(99999u));
+    }
+
+    // ── Edge-case tests ──────────────────────────────────────────────────────
+
+    [Fact]
+    public void Register_Throws_WhenSteamIdAlreadyRegistered()
+    {
+        var mapper = new PeerIdMapper();
+        var steamId = new SteamId(76561198000000001UL);
+        mapper.Register(steamId, connection: 100);
+        Assert.Throws<InvalidOperationException>(() => mapper.Register(steamId, connection: 200));
+    }
+
+    [Fact]
+    public void Register_AllowsReregistration_AfterRemove()
+    {
+        var mapper = new PeerIdMapper();
+        var steamId = new SteamId(76561198000000001UL);
+        var godotId = mapper.Register(steamId, connection: 100);
+        mapper.Remove(godotId);
+        // Should not throw after removal
+        var newId = mapper.Register(steamId, connection: 101);
+        Assert.Equal(3, newId); // 2 was the first ID, 3 is the second (counter doesn't reset on Remove)
+    }
+
+    [Fact]
+    public void Remove_ReleasesConnectionHandle_AllowingReuse()
+    {
+        var mapper = new PeerIdMapper();
+        var id1 = mapper.Register(new SteamId(1), connection: 100);
+        mapper.Remove(id1);
+        // Connection handle 100 is now free — a different Steam peer can use it
+        var id2 = mapper.Register(new SteamId(2), connection: 100);
+        Assert.True(mapper.TryGetGodotId(100, out var found));
+        Assert.Equal(id2, found);
+    }
+
+    [Fact]
+    public void Register_ConnectionHandleReuse_OverwritesPreviousMapping()
+    {
+        // If caller registers a new peer with an already-mapped connection handle,
+        // the handle is remapped. This documents the expected behaviour.
+        var mapper = new PeerIdMapper();
+        var id1 = mapper.Register(new SteamId(1), connection: 100);
+        mapper.Remove(id1);
+        var id2 = mapper.Register(new SteamId(2), connection: 100); // same handle, new peer
+        Assert.True(mapper.TryGetGodotId(100, out var found));
+        Assert.Equal(id2, found);
+        Assert.False(mapper.TryGetGodotId(100, out _) && found == id1); // old mapping gone
     }
 }

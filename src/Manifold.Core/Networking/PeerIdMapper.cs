@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace Manifold.Core.Networking;
@@ -13,19 +14,28 @@ internal sealed class PeerIdMapper
     private readonly Dictionary<SteamId, int> _steamToGodot = new();
     private readonly Dictionary<int, SteamId> _godotToSteam = new();
     private readonly Dictionary<uint, int>    _connToGodot  = new(); // HSteamNetConnection → Godot ID
+    /// <summary>Reverse of _connToGodot — maps Godot peer ID to its HSteamNetConnection handle. Enables O(1) removal.</summary>
+    private readonly Dictionary<int, uint>    _godotToConn  = new();
     private int _nextId = 2; // Godot peer IDs start at 2; 1 is always the server
 
     /// <summary>
     /// Registers a new peer, assigning the next available Godot peer ID.
     /// Godot peer IDs start at 2 — 1 is always the server.
     /// </summary>
+    /// <exception cref="InvalidOperationException">If <paramref name="steamId"/> is already registered.</exception>
     /// <returns>The assigned Godot peer ID.</returns>
     internal int Register(SteamId steamId, uint connection)
     {
+        if (_steamToGodot.ContainsKey(steamId))
+            throw new InvalidOperationException(
+                $"SteamId {steamId} is already registered as Godot peer {_steamToGodot[steamId]}. " +
+                "Call Remove() before re-registering.");
+
         int id = _nextId++;
         _steamToGodot[steamId]   = id;
         _godotToSteam[id]        = steamId;
         _connToGodot[connection] = id;
+        _godotToConn[id]         = connection;
         return id;
     }
 
@@ -38,11 +48,12 @@ internal sealed class PeerIdMapper
         if (!_godotToSteam.TryGetValue(godotId, out var steamId)) return;
         _steamToGodot.Remove(steamId);
         _godotToSteam.Remove(godotId);
-        // Remove all connection handles that map to this godot ID
-        var toRemove = new List<uint>();
-        foreach (var kv in _connToGodot)
-            if (kv.Value == godotId) toRemove.Add(kv.Key);
-        foreach (var k in toRemove) _connToGodot.Remove(k);
+        // O(1) connection lookup via reverse map — no loop, no allocation
+        if (_godotToConn.TryGetValue(godotId, out var conn))
+        {
+            _connToGodot.Remove(conn);
+            _godotToConn.Remove(godotId);
+        }
     }
 
     /// <summary>Returns the Steam ID for the given Godot peer ID.</summary>
@@ -73,6 +84,7 @@ internal sealed class PeerIdMapper
         _steamToGodot.Clear();
         _godotToSteam.Clear();
         _connToGodot.Clear();
+        _godotToConn.Clear();
         _nextId = 2;
     }
 }
