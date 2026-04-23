@@ -5,7 +5,10 @@
 
 using Godot;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using Manifold.Core;
+using Manifold.Core.Interop;
 using Manifold.Core.Networking;
 using Manifold.Core.Testing;
 
@@ -113,6 +116,10 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension
         _core = new SteamNetworkingCore(new FakeSteamBackend());
         // TODO (Phase 3): wire LiveSteamNetworkingBackend when SteamLifecycle is initialized (replace FakeSteamBackend).
         // TODO (Task 17): Register with SteamPeerRegistry for lifecycle hook.
+
+        // Subscribe to core events
+        _core.IncomingConnection      += OnIncomingConnection;
+        _core.ConnectionStatusChanged += OnConnectionStatusChanged;
     }
 
     // ── Constructor for injection (tests / advanced use) ─────────────────────
@@ -121,6 +128,10 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension
     internal SteamMultiplayerPeer(INetworkingBackend backend)
     {
         _core = new SteamNetworkingCore(backend);
+
+        // Subscribe to core events
+        _core.IncomingConnection      += OnIncomingConnection;
+        _core.ConnectionStatusChanged += OnConnectionStatusChanged;
     }
 
     // ── MultiplayerPeerExtension overrides ────────────────────────────────────
@@ -190,4 +201,85 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension
 
     /// <inheritdoc/>
     public override int _GetAvailablePacketCount() => _incoming.Count;
+
+    // ── Host / Client creation (MASTER_DESIGN §8.10) ──────────────────────────
+
+    /// <summary>
+    /// Creates a P2P listen socket. Server peer ID is always 1.
+    /// Transitions state to <see cref="PeerState.Listening"/>.
+    /// </summary>
+    /// <param name="virtualPort">Virtual port to listen on. Must match the port clients connect to.</param>
+    /// <returns><see cref="Error.Ok"/> on success; <see cref="Error.AlreadyInUse"/> if already initialised;
+    /// <see cref="Error.CantCreate"/> if the listen socket could not be created.</returns>
+    public Error CreateHost(int virtualPort = 0)
+    {
+        if (_state != PeerState.Idle)
+            return Error.AlreadyInUse;
+
+        var socket = _core.CreateHost(virtualPort);
+        if (!socket.IsValid)
+            return Error.CantCreate;
+
+        _isServer = true;
+        _uniqueId = 1;  // Server is always peer 1 in Godot
+        _state    = PeerState.Listening;
+        return Error.Ok;
+    }
+
+    /// <summary>
+    /// Initiates a P2P connection to the host identified by their Steam64 ID.
+    /// Transitions state to <see cref="PeerState.Connecting"/>; the handshake
+    /// will transition to <see cref="PeerState.Connected"/> when complete.
+    /// </summary>
+    /// <param name="hostSteamId">The host's Steam64 ID.</param>
+    /// <param name="virtualPort">Virtual port to connect on. Must match the host's listen port.</param>
+    /// <returns><see cref="Error.Ok"/> on success; <see cref="Error.AlreadyInUse"/> if already initialised;
+    /// <see cref="Error.CantConnect"/> if the connection could not be initiated.</returns>
+    public Error CreateClient(SteamId hostSteamId, int virtualPort = 0)
+    {
+        if (_state != PeerState.Idle)
+            return Error.AlreadyInUse;
+
+        var conn = _core.CreateClient(hostSteamId, virtualPort);
+        if (!conn.IsValid)
+            return Error.CantConnect;
+
+        _isServer = false;
+        _uniqueId = 0;  // assigned by server during handshake
+        _state    = PeerState.Connecting;
+        return Error.Ok;
+    }
+
+    // ── Lobby helpers — Phase 3 stubs (MASTER_DESIGN §8.10) ──────────────────
+
+    /// <summary>
+    /// Creates a Steam lobby and immediately calls <see cref="CreateHost"/> on success.
+    /// <para><b>Phase 3 stub</b>: returns <see cref="Error.Unavailable"/> until <c>SteamMatchmaking</c> is implemented.</para>
+    /// </summary>
+    public Task<Error> HostWithLobbyAsync(
+        ELobbyType type,
+        int maxMembers,
+        CancellationToken cancellationToken = default)
+        => Task.FromResult(Error.Unavailable);
+
+    /// <summary>
+    /// Joins a Steam lobby and immediately calls <see cref="CreateClient"/> using the lobby owner's Steam ID.
+    /// <para><b>Phase 3 stub</b>: returns <see cref="Error.Unavailable"/> until <c>SteamMatchmaking</c> is implemented.</para>
+    /// </summary>
+    public Task<Error> JoinLobbyAsync(
+        SteamId lobbyId,
+        CancellationToken cancellationToken = default)
+        => Task.FromResult(Error.Unavailable);
+
+    // ── Core event handlers (Tasks 13-14 will fill these in) ─────────────────
+
+    private void OnIncomingConnection(uint connection)
+    {
+        // Task 14: handle handshake initiation
+    }
+
+    private void OnConnectionStatusChanged(uint connection, int newState, int oldState, string debugMsg)
+    {
+        // Task 13: handle state transitions
+    }
 }
