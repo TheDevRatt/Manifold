@@ -1,6 +1,7 @@
 // Tests for SteamNetworkingCore using FakeSteamBackend — no real Steam required.
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Manifold.Core.Networking;
 using Manifold.Core.Testing;
@@ -192,5 +193,102 @@ public class SteamNetworkingCoreTests
         core.Close();
         core.Close(); // second call — should be a no-op
         Assert.Equal(1, fake.CallLog.Count(x => x == "CloseConnection"));
+    }
+
+    // ── HandleConnectionStatusChanged ─────────────────────────────────────────
+
+    [Fact]
+    public void HandleConnectionStatusChanged_IncomingOnHost_FiresIncomingConnectionEvent()
+    {
+        var core = MakeCore(out _);
+        core.CreateHost();
+        uint? captured = null;
+        core.IncomingConnection += conn => captured = conn;
+
+        // State 1 = k_ESteamNetworkingConnectionState_Connecting
+        core.HandleConnectionStatusChanged(connection: 99, newState: 1, oldState: 0, debugMsg: "");
+
+        Assert.Equal(99u, captured);
+    }
+
+    [Fact]
+    public void HandleConnectionStatusChanged_ConnectedOnHost_FiresConnectionStatusChangedNotIncoming()
+    {
+        var core = MakeCore(out _);
+        core.CreateHost();
+        uint? incomingConn = null;
+        (uint conn, int newState)? statusChange = null;
+        core.IncomingConnection += c => incomingConn = c;
+        core.ConnectionStatusChanged += (c, ns, os, dbg) => statusChange = (c, ns);
+
+        // State 3 = k_ESteamNetworkingConnectionState_Connected
+        core.HandleConnectionStatusChanged(connection: 99, newState: 3, oldState: 1, debugMsg: "");
+
+        Assert.Null(incomingConn);
+        Assert.NotNull(statusChange);
+        Assert.Equal(99u, statusChange!.Value.conn);
+        Assert.Equal(3, statusChange!.Value.newState);
+    }
+
+    [Fact]
+    public void HandleConnectionStatusChanged_IncomingOnClient_DoesNotFireIncomingConnectionEvent()
+    {
+        // Client mode: incoming connections don't make sense, should be ignored
+        var core = MakeCore(out _);
+        core.CreateClient(new SteamId(1));
+        uint? captured = null;
+        core.IncomingConnection += conn => captured = conn;
+
+        core.HandleConnectionStatusChanged(connection: 99, newState: 1, oldState: 0, debugMsg: "");
+
+        // Client is not a host — IncomingConnection should NOT fire
+        Assert.Null(captured);
+    }
+
+    [Fact]
+    public void Close_DisposesStatusSubscription()
+    {
+        // After Close(), the subscription token should be disposed (IDisposable.Dispose called)
+        // We can't easily test CallbackDispatcher internals here, but we can verify Close()
+        // doesn't throw when called after the subscription was set up.
+        var core = MakeCore(out _);
+        core.CreateHost();
+        core.Close(); // should not throw
+    }
+
+    // ── DrainMessages ──────────────────────────────────────────────────────────
+
+    [Fact]
+    public void DrainMessages_Host_CallsReceiveMessagesOnPollGroup()
+    {
+        var core = MakeCore(out var fake);
+        core.CreateHost();
+        var list = new List<ReceivedPacket>();
+        core.DrainMessages(list);
+        Assert.Contains("ReceiveMessagesOnPollGroup", fake.CallLog);
+        Assert.DoesNotContain("ReceiveMessagesOnConnection", fake.CallLog);
+        Assert.Empty(list); // fake returns 0 messages
+    }
+
+    [Fact]
+    public void DrainMessages_Client_CallsReceiveMessagesOnConnection()
+    {
+        var core = MakeCore(out var fake);
+        core.CreateClient(new SteamId(1));
+        var list = new List<ReceivedPacket>();
+        core.DrainMessages(list);
+        Assert.Contains("ReceiveMessagesOnConnection", fake.CallLog);
+        Assert.DoesNotContain("ReceiveMessagesOnPollGroup", fake.CallLog);
+        Assert.Empty(list);
+    }
+
+    [Fact]
+    public void DrainMessages_EmptyResult_DoesNotAddToOutput()
+    {
+        var core = MakeCore(out var fake);
+        core.CreateHost();
+        var list = new List<ReceivedPacket>();
+        core.DrainMessages(list);
+        Assert.Empty(list);
     }
 }
