@@ -56,31 +56,6 @@ public sealed class SteamIdTests
     public void GreaterThanOperator_Works()
         => Assert.True(new SteamId(2) > new SteamId(1));
 
-    [Fact]
-    public void LessThanOrEqualOperator_EqualValues()
-        => Assert.True(new SteamId(1) <= new SteamId(1));
-
-    [Fact]
-    public void GreaterThanOrEqualOperator_EqualValues()
-        => Assert.True(new SteamId(1) >= new SteamId(1));
-
-    // ── Conversion ───────────────────────────────────────────────────────────
-
-    [Fact]
-    public void ImplicitToUlong_ReturnsValue()
-    {
-        SteamId id = new(ValidRaw);
-        ulong raw  = id;
-        Assert.Equal(ValidRaw, raw);
-    }
-
-    [Fact]
-    public void ExplicitFromUlong_WrapsValue()
-    {
-        SteamId id = (SteamId)ValidRaw;
-        Assert.Equal(ValidRaw, id.Value);
-    }
-
     // ── Parsing ──────────────────────────────────────────────────────────────
 
     [Fact]

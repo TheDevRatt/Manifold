@@ -4,6 +4,7 @@
 using System;
 using Manifold.Core.Interop;
 using Xunit;
+using SteamInterop = Manifold.Core.Interop;
 
 namespace Manifold.Core.Tests.Interop;
 
@@ -22,12 +23,17 @@ public unsafe class ManualPInvokeTests
     }
 
     [Fact]
-    public void SteamNetworkingIdentity_StructSize_Matches_SdkValue()
+    public void SteamNetworkingIdentity_IdentitySize_MatchesMarshalSizeOf()
     {
-        // Total struct size = 136 bytes per SDK 1.64 steamnetworkingtypes.h
-        // sizeof(ulong) = 8 — the size written into m_cbSize for the SteamID64 variant
-        Assert.Equal(136, SteamNative.SteamNetworkingIdentitySize);
-        Assert.Equal(8, sizeof(ulong));
+        // SteamNative.SteamNetworkingIdentitySize is our stack-allocation constant for ConnectP2P.
+        // It must be >= Marshal.SizeOf<SteamNetworkingIdentity>() — we need at least that many bytes.
+        // NativeSizeValidationTests verifies Marshal.SizeOf against the C++ sizeof() binary.
+        // This test chains the two: constant >= C# struct size >= C++ native size.
+        int marshalSize = System.Runtime.InteropServices.Marshal.SizeOf<SteamInterop.SteamNetworkingIdentity>();
+        Assert.True(
+            SteamNative.SteamNetworkingIdentitySize >= marshalSize,
+            $"SteamNetworkingIdentitySize ({SteamNative.SteamNetworkingIdentitySize}) must be >= " +
+            $"Marshal.SizeOf<SteamNetworkingIdentity>() ({marshalSize}).");
     }
 
     [Fact]

@@ -475,4 +475,74 @@ public class SteamNetworkingCoreTests
 
         Assert.Equal(3, capturedState);
     }
+
+    // ── Sad-path state machine tests ──────────────────────────────────────────
+
+    [Fact]
+    public void HandleConnectionStatusChanged_ProblemDetectedLocally_FiresConnectionStatusChanged()
+    {
+        var core = MakeCore(out _);
+        core.CreateClient(new SteamId(1));
+        (uint conn, int ns)? fired = null;
+        core.ConnectionStatusChanged += (c, ns, os, dbg) => fired = (c, ns);
+        core.HandleConnectionStatusChanged(connection: 10, newState: 6, oldState: 3, debugMsg: "local problem");
+        Assert.NotNull(fired);
+        Assert.Equal(10u, fired!.Value.conn);
+        Assert.Equal(6, fired!.Value.ns); // k_ESteamNetworkingConnectionState_ProblemDetectedLocally
+    }
+
+    [Fact]
+    public void HandleConnectionStatusChanged_FindingRoute_FiresConnectionStatusChanged()
+    {
+        var core = MakeCore(out _);
+        core.CreateClient(new SteamId(1));
+        (uint conn, int ns)? fired = null;
+        core.ConnectionStatusChanged += (c, ns, os, dbg) => fired = (c, ns);
+        // State 2 = FindingRoute — intermediate, should surface as a status change
+        core.HandleConnectionStatusChanged(connection: 10, newState: 2, oldState: 1, debugMsg: "finding route");
+        Assert.NotNull(fired);
+        Assert.Equal(2, fired!.Value.ns);
+    }
+
+    [Fact]
+    public void HandleConnectionStatusChanged_ClosedByPeer_OnClient_FiresConnectionStatusChanged()
+    {
+        var core = MakeCore(out _);
+        core.CreateClient(new SteamId(1));
+        (uint conn, int ns)? fired = null;
+        core.ConnectionStatusChanged += (c, ns, os, dbg) => fired = (c, ns);
+        core.HandleConnectionStatusChanged(connection: 2, newState: 4, oldState: 3, debugMsg: "remote close");
+        Assert.NotNull(fired);
+        Assert.Equal(4, fired!.Value.ns); // k_ESteamNetworkingConnectionState_ClosedByPeer
+    }
+
+    [Fact]
+    public void HandleConnectionStatusChanged_ClosedByPeer_OnHost_RemovesFromPendingHandshakes_ViaPeer()
+    {
+        // Verifies that when host gets ClosedByPeer for a connection that had a pending handshake,
+        // the pending handshake entry is cleaned up (not leaked).
+        // This is tested indirectly — SteamMultiplayerPeer handles _pendingHandshakes cleanup;
+        // SteamNetworkingCore routes the event and does not own handshake tracking.
+        // So here we just verify the event is routed to ConnectionStatusChanged for the host:
+        var core = MakeCore(out _);
+        core.CreateHost();
+        (uint conn, int ns)? fired = null;
+        core.ConnectionStatusChanged += (c, ns, os, dbg) => fired = (c, ns);
+        core.HandleConnectionStatusChanged(connection: 99, newState: 4, oldState: 3, debugMsg: "peer left");
+        Assert.NotNull(fired);
+        Assert.Equal(99u, fired!.Value.conn);
+    }
+
+    [Fact]
+    public void HandleConnectionStatusChanged_UnknownState_IsRoutedToConnectionStatusChanged()
+    {
+        // Any state not specifically handled by IncomingConnection should route to ConnectionStatusChanged
+        var core = MakeCore(out _);
+        core.CreateHost();
+        (uint conn, int ns)? fired = null;
+        core.ConnectionStatusChanged += (c, ns, os, dbg) => fired = (c, ns);
+        // State 99 = fictional future state — must not crash, must route to general handler
+        core.HandleConnectionStatusChanged(connection: 5, newState: 99, oldState: 0, debugMsg: "unknown");
+        Assert.NotNull(fired);
+    }
 }

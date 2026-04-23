@@ -144,6 +144,36 @@ public class HandshakeProtocolTests
         Assert.True(ok);
         Assert.Equal(originalPeerId, parsedPeerId);
     }
+
+    // ─── Sad-path / duplicate ACK tests ──────────────────────────────────────
+
+    [Fact]
+    public void TryParseHandshake_WithAckBytes_ReturnsFalse()
+    {
+        // An ACK packet (HandshakeAck kind) must not be parsed as a Handshake
+        var ack = HandshakeProtocol.BuildAck();
+        bool result = HandshakeProtocol.TryParseHandshake(ack, out _);
+        Assert.False(result); // kind=HandshakeAck != Handshake
+    }
+
+    [Fact]
+    public void IsAck_WithHandshakeAck_ThenSamePacket_SecondCallStillReturnsTrue()
+    {
+        // Simulates duplicate ACK — IsAck must be stateless and idempotent
+        var ack = HandshakeProtocol.BuildAck();
+        Assert.True(HandshakeProtocol.IsAck(ack));
+        Assert.True(HandshakeProtocol.IsAck(ack)); // duplicate — no state change expected
+    }
+
+    [Fact]
+    public void TryParseHandshake_DataPacket_ReturnsFalse()
+    {
+        // A data packet must not be parsed as a handshake
+        Span<byte> buf = stackalloc byte[PacketHeader.Size + sizeof(int)];
+        new PacketHeader(PacketKind.Data, channel: 0).Encode(buf);
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(buf[PacketHeader.Size..], 42);
+        Assert.False(HandshakeProtocol.TryParseHandshake(buf, out _));
+    }
 }
 
 public class HandshakeStateTests

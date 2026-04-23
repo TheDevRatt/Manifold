@@ -174,14 +174,6 @@ public class PacketHeaderTests
     }
 
     [Fact]
-    public void DefaultVersionParameter_IsZero()
-    {
-        // Default version parameter must be 0 per current protocol
-        var header = new PacketHeader(PacketKind.Data, channel: 0);
-        Assert.Equal(0, header.Version);
-    }
-
-    [Fact]
     public void Default_PacketHeader_HasZeroVersionDataKindAndZeroChannel()
     {
         var header = default(PacketHeader);

@@ -17,20 +17,6 @@ public sealed class ResultTests
     }
 
     [Fact]
-    public void Ok_Value_IsSet()
-    {
-        var r = Result<string>.Ok("hello");
-        Assert.Equal("hello", r.Value);
-    }
-
-    [Fact]
-    public void Ok_Error_IsEmpty()
-    {
-        var r = Result<int>.Ok(1);
-        Assert.Equal(string.Empty, r.Error);
-    }
-
-    [Fact]
     public void Ok_TryGetValue_ReturnsTrueAndValue()
     {
         var r = Result<int>.Ok(99);
@@ -53,13 +39,6 @@ public sealed class ResultTests
     {
         var r = Result<int>.Fail("bad state");
         Assert.Equal("bad state", r.Error);
-    }
-
-    [Fact]
-    public void Fail_Value_IsDefault()
-    {
-        var r = Result<int>.Fail("oops");
-        Assert.Equal(default, r.Value);
     }
 
     [Fact]

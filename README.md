@@ -96,6 +96,11 @@ Drop the Steamworks SDK native libraries into your project's output directory. A
 - [x] `CallbackDispatcher.Tick` reentrancy guard — exits cleanly if `Dispose` called from a handler
 - [ ] End-to-end loopback: two peers connect via live Steam P2P — manual gate
 
+> **Known gaps:** `Manifold.Godot.Tests` (GdUnit4 headless test suite, §10 category 5) does not yet exist.
+> The Godot integration layer (`SteamMultiplayerPeer`, `SteamManager`, `[Signal]` wiring) is verified only
+> via `FakeSteamBackend` unit tests in `Manifold.Core.Tests`. GdUnit4 test setup is a Phase 3 task
+> requiring a Godot headless build in CI.
+
 ### Phase 3: Packaging & CI
 
 - [ ] GitHub Actions: build, test, coverage on push

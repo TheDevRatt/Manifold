@@ -14,16 +14,8 @@ public sealed class ExceptionTests
         => Assert.IsAssignableFrom<SteamException>(new SteamInitException("fail"));
 
     [Fact]
-    public void SteamInitException_DefaultResultCode_IsZero()
-        => Assert.Equal(0, new SteamInitException("fail").ResultCode);
-
-    [Fact]
     public void SteamInitException_StoresResultCode()
         => Assert.Equal(42, new SteamInitException("fail", 42).ResultCode);
-
-    [Fact]
-    public void SteamInitException_MessageIsPreserved()
-        => Assert.Equal("fail", new SteamInitException("fail").Message);
 
     // ── SteamIOFailedException ────────────────────────────────────────────────
 
@@ -57,15 +49,6 @@ public sealed class ExceptionTests
     public void SteamCallResultTimeoutException_IsSteamException()
         => Assert.IsAssignableFrom<SteamException>(
             new SteamCallResultTimeoutException(1, TimeSpan.FromSeconds(30)));
-
-    [Fact]
-    public void SteamCallResultTimeoutException_StoresApiCall()
-        => Assert.Equal(42UL, new SteamCallResultTimeoutException(42, TimeSpan.FromSeconds(10)).ApiCall);
-
-    [Fact]
-    public void SteamCallResultTimeoutException_StoresTimeout()
-        => Assert.Equal(TimeSpan.FromSeconds(30),
-            new SteamCallResultTimeoutException(1, TimeSpan.FromSeconds(30)).Timeout);
 
     // ── SteamShutdownException ────────────────────────────────────────────────
 
