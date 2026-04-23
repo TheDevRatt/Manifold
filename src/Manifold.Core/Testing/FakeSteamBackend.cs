@@ -35,6 +35,18 @@ public class FakeSteamBackend : IUserBackend, IMatchmakingBackend, INetworkingBa
     /// <summary>Value returned by <see cref="GetLobbyOwner"/>.</summary>
     public ulong LobbyOwner { get; set; } = 0;
 
+    /// <summary>Handle returned by <see cref="CreateListenSocketP2P"/>. Default: 1 (valid).</summary>
+    public uint NextListenSocketHandle { get; set; } = 1;
+
+    /// <summary>Handle returned by <see cref="CreatePollGroup"/>. Default: 1 (valid).</summary>
+    public uint NextPollGroupHandle { get; set; } = 1;
+
+    /// <summary>Handle returned by <see cref="ConnectP2P"/>. Default: 2 (valid).</summary>
+    public uint NextConnectionHandle { get; set; } = 2;
+
+    /// <summary>Last Steam64 ID passed to <see cref="ConnectP2P"/>.</summary>
+    public ulong LastConnectP2PSteamId { get; private set; }
+
     /// <inheritdoc/>
     public ulong GetSteamID()    { Record(nameof(GetSteamID));  return LocalSteamId; }
 
@@ -108,25 +120,18 @@ public class FakeSteamBackend : IUserBackend, IMatchmakingBackend, INetworkingBa
     }
 
     /// <inheritdoc/>
-    public uint CreateListenSocketP2P(int virtualPort)
-    {
-        Record(nameof(CreateListenSocketP2P));
-        return 1;
-    }
+    public uint CreateListenSocketP2P(int virtualPort)  { Record(nameof(CreateListenSocketP2P)); return NextListenSocketHandle; }
 
     /// <inheritdoc/>
     public uint ConnectP2P(ulong remoteIdentitySteamId, int virtualPort)
     {
         Record(nameof(ConnectP2P));
-        return 2;
+        LastConnectP2PSteamId = remoteIdentitySteamId;
+        return NextConnectionHandle;
     }
 
     /// <inheritdoc/>
-    public uint CreatePollGroup()
-    {
-        Record(nameof(CreatePollGroup));
-        return 1;
-    }
+    public uint CreatePollGroup()                        { Record(nameof(CreatePollGroup));       return NextPollGroupHandle;     }
 
     /// <inheritdoc/>
     public bool DestroyPollGroup(uint pollGroup)

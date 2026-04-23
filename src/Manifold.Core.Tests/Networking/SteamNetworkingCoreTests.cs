@@ -1,6 +1,7 @@
 // Tests for SteamNetworkingCore using FakeSteamBackend — no real Steam required.
 
 using System;
+using System.Linq;
 using Manifold.Core.Networking;
 using Manifold.Core.Testing;
 using Xunit;
@@ -60,6 +61,7 @@ public class SteamNetworkingCoreTests
         core.CreateClient(hostId);
 
         Assert.Contains(nameof(FakeSteamBackend.ConnectP2P), fake.CallLog);
+        Assert.Equal(76561198000000099UL, fake.LastConnectP2PSteamId);
     }
 
     [Fact]
@@ -156,5 +158,39 @@ public class SteamNetworkingCoreTests
 
         // FakeSteamBackend.ConnectP2P returns 2
         Assert.Equal(2u, core.ServerConnection);
+    }
+
+    // ── Close (idempotent / cold-start) ────────────────────────────────────────
+
+    [Fact]
+    public void Close_BeforeAnySetup_DoesNotCallBackend()
+    {
+        var core = MakeCore(out var fake);
+        core.Close(); // should not throw or call any backend method
+        Assert.DoesNotContain("CloseListenSocket", fake.CallLog);
+        Assert.DoesNotContain("CloseConnection",   fake.CallLog);
+        Assert.DoesNotContain("DestroyPollGroup",  fake.CallLog);
+    }
+
+    [Fact]
+    public void Close_Host_CalledTwice_IsIdempotent()
+    {
+        var core = MakeCore(out var fake);
+        core.CreateHost();
+        core.Close();
+        core.Close(); // second call — should be a no-op
+        // CloseListenSocket and DestroyPollGroup should appear exactly once each
+        Assert.Equal(1, fake.CallLog.Count(x => x == "CloseListenSocket"));
+        Assert.Equal(1, fake.CallLog.Count(x => x == "DestroyPollGroup"));
+    }
+
+    [Fact]
+    public void Close_Client_CalledTwice_IsIdempotent()
+    {
+        var core = MakeCore(out var fake);
+        core.CreateClient(new SteamId(1));
+        core.Close();
+        core.Close(); // second call — should be a no-op
+        Assert.Equal(1, fake.CallLog.Count(x => x == "CloseConnection"));
     }
 }

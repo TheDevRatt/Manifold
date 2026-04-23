@@ -74,6 +74,8 @@ internal sealed class SteamNetworkingCore
     /// </summary>
     internal void AcceptAndTrack(uint connection)
     {
+        System.Diagnostics.Debug.Assert(_isHost,
+            "AcceptAndTrack must only be called in host mode. _isHost is false.");
         _backend.AcceptConnection(connection);
         _backend.SetConnectionPollGroup(connection, _pollGroup);
     }
@@ -100,7 +102,7 @@ internal sealed class SteamNetworkingCore
 
     /// <summary>
     /// Closes all connections and releases host resources (listen socket + poll group).
-    /// Safe to call in either host or client mode.
+    /// Safe to call in either host or client mode. Idempotent — safe to call multiple times.
     /// </summary>
     internal void Close()
     {
@@ -108,10 +110,14 @@ internal sealed class SteamNetworkingCore
         {
             _backend.CloseListenSocket(_listenSocket);
             _backend.DestroyPollGroup(_pollGroup);
+            _listenSocket = 0;
+            _pollGroup    = 0;
+            _isHost       = false;  // reset so second call is no-op
         }
         else if (_serverConnection != 0)
         {
             _backend.CloseConnection(_serverConnection, 0, null, false);
+            _serverConnection = 0;  // reset so second call is no-op
         }
     }
 
