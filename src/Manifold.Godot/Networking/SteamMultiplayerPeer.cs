@@ -286,6 +286,13 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension
     private const int k_nSteamNetworkingSend_Reliable          = 8;
     private const int k_nSteamNetworkingSend_UnreliableNoDelay = 5; // Unreliable | NoDelay | NoNagle (= 0 | 4 | 1 = 5)
 
+    // ── Steam connection state constants (from steamnetworkingtypes.h) ────────
+
+    private const int k_ESteamNetworkingConnectionState_Connecting             = 1;
+    private const int k_ESteamNetworkingConnectionState_Connected              = 3;
+    private const int k_ESteamNetworkingConnectionState_ClosedByPeer           = 4;
+    private const int k_ESteamNetworkingConnectionState_ProblemDetectedLocally = 6;
+
     // ── Handshake tracking (Task 14 will fully populate) ─────────────────────
 
     private readonly System.Collections.Generic.Dictionary<uint, HandshakeState> _pendingHandshakes = new();
@@ -324,7 +331,16 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension
                     break;
 
                 case PacketKind.HandshakeAck when _isServer:
-                    // Server side handled in Task 14 — just return buffer
+                    if (_pendingHandshakes.TryGetValue(pkt.Connection, out var hs))
+                    {
+                        hs.MarkComplete();
+                        _pendingHandshakes.Remove(pkt.Connection);
+                        if (_peerMapper.TryGetGodotId(pkt.Connection, out int clientGodotId))
+                        {
+                            // Both sides now connected
+                            EmitSignal(MultiplayerPeer.SignalName.PeerConnected, (long)clientGodotId);
+                        }
+                    }
                     System.Buffers.ArrayPool<byte>.Shared.Return(pkt.Buffer);
                     break;
 
@@ -505,24 +521,87 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension
 
     /// <summary>
     /// Checks for handshake timeouts and closes stalled connections.
-    /// Task 14 will implement the full logic; this is a stub.
+    /// Any pending handshake that has exceeded the 5-second deadline is closed and cleaned up.
     /// </summary>
     private void CheckHandshakeTimeouts()
     {
-        // Task 14 will implement handshake timeout checking
+        if (_pendingHandshakes.Count == 0) return;
+
+        var expired = new System.Collections.Generic.List<uint>();
+        foreach (var (conn, hs) in _pendingHandshakes)
+            if (hs.IsExpired) expired.Add(conn);
+
+        foreach (var conn in expired)
+        {
+            _pendingHandshakes.Remove(conn);
+            if (_peerMapper.TryGetGodotId(conn, out int peerId))
+                _peerMapper.Remove(peerId);
+            _core.CloseConnection(conn, reason: 0, debugMsg: "Handshake timeout", linger: false);
+        }
     }
 
     // ── Core event handlers ───────────────────────────────────────────────────
 
-    /// <summary>Called by SteamNetworkingCore when a new incoming connection arrives (host only). Task 14 implements handshake initiation.</summary>
+    /// <summary>Called by SteamNetworkingCore when a new incoming connection arrives (host only).</summary>
     private void OnIncomingConnection(uint connection)
     {
-        // Task 14: handle handshake initiation (accept, register, send Handshake packet)
+        if (!_isServer || _refusingNewConnections) return;
+
+        // Get remote Steam ID from the connection info
+        SteamId remoteSteamId = _core.GetRemoteSteamId(connection);
+        if (!remoteSteamId.IsValid) return;  // can't map an invalid ID
+
+        // Accept the connection and add to poll group
+        _core.AcceptAndTrack(connection);
+
+        // Assign Godot peer ID and register mappings
+        int godotId;
+        try
+        {
+            godotId = _peerMapper.Register(remoteSteamId, connection);
+        }
+        catch (InvalidOperationException)
+        {
+            // SteamId already registered — this peer is already connected
+            _core.CloseConnection(connection, reason: 0, debugMsg: "Already connected", linger: false);
+            return;
+        }
+
+        // Send handshake with assigned peer ID
+        byte[] handshake = HandshakeProtocol.BuildHandshake(godotId);
+        _core.SendTo(connection, handshake, sendFlags: k_nSteamNetworkingSend_Reliable);
+
+        // Start 5-second handshake timeout
+        _pendingHandshakes[connection] = new HandshakeState();
     }
 
-    /// <summary>Called by SteamNetworkingCore when a connection's status changes. Task 13 implements state transitions.</summary>
+    /// <summary>Called by SteamNetworkingCore when a connection's status changes.</summary>
     private void OnConnectionStatusChanged(uint connection, int newState, int oldState, string debugMsg)
     {
-        // Task 14: handle state transitions (connecting → connected, closed-by-peer, etc.)
+        if (!_isServer)
+        {
+            // Client: when server confirms connection (state → Connected), we're in Authenticating
+            if (newState == k_ESteamNetworkingConnectionState_Connected)
+            {
+                _state = PeerState.Authenticating;
+                // Handshake packet will come from server in _Poll
+            }
+            else if (newState == k_ESteamNetworkingConnectionState_ClosedByPeer
+                  || newState == k_ESteamNetworkingConnectionState_ProblemDetectedLocally)
+            {
+                HandleRemoteDisconnect(connection);
+            }
+        }
+        else
+        {
+            // Host: handle peer disconnects from connection status changes
+            if (newState == k_ESteamNetworkingConnectionState_ClosedByPeer
+             || newState == k_ESteamNetworkingConnectionState_ProblemDetectedLocally)
+            {
+                // Remove any pending handshake
+                _pendingHandshakes.Remove(connection);
+                HandleRemoteDisconnect(connection);
+            }
+        }
     }
 }

@@ -90,4 +90,7 @@ public interface INetworkingBackend
 
     /// <summary>Drains messages from a single connection into <paramref name="ppOut"/>. Returns message count.</summary>
     int ReceiveMessagesOnConnection(uint hConn, IntPtr[] ppOut, int maxMessages);
+
+    /// <summary>Returns the remote Steam64 ID for the given connection handle.</summary>
+    SteamId GetRemoteSteamId(uint connection);
 }

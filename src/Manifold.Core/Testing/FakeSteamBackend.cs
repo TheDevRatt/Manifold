@@ -47,6 +47,9 @@ public class FakeSteamBackend : IUserBackend, IMatchmakingBackend, INetworkingBa
     /// <summary>Last Steam64 ID passed to <see cref="ConnectP2P"/>.</summary>
     public ulong LastConnectP2PSteamId { get; private set; }
 
+    /// <summary>Value returned by <see cref="GetRemoteSteamId"/>. Default: a recognisable fake ID.</summary>
+    public SteamId RemoteSteamId { get; set; } = new SteamId(76561198000000099UL);
+
     /// <inheritdoc/>
     public ulong GetSteamID()    { Record(nameof(GetSteamID));  return LocalSteamId; }
 
@@ -188,4 +191,7 @@ public class FakeSteamBackend : IUserBackend, IMatchmakingBackend, INetworkingBa
         Record(nameof(ReceiveMessagesOnConnection));
         return 0;
     }
+
+    /// <inheritdoc/>
+    public SteamId GetRemoteSteamId(uint connection) { Record(nameof(GetRemoteSteamId)); return RemoteSteamId; }
 }

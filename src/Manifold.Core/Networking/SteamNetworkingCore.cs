@@ -196,6 +196,9 @@ internal sealed class SteamNetworkingCore : IDisposable
     /// <summary>The server connection handle. Only valid in client mode after <see cref="CreateClient"/>.</summary>
     internal uint ServerConnection => _serverConnection;
 
+    /// <summary>Returns the Steam64 ID of the remote peer for the given connection handle.</summary>
+    internal SteamId GetRemoteSteamId(uint connection) => _backend.GetRemoteSteamId(connection);
+
     // ── Receive ───────────────────────────────────────────────────────────────
 
     /// <summary>

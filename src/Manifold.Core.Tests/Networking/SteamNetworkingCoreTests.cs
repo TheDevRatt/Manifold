@@ -382,4 +382,15 @@ public class SteamNetworkingCoreTests
 
         ArrayPool<byte>.Shared.Return(list[0].Buffer);
     }
+
+    // ── GetRemoteSteamId ───────────────────────────────────────────────────────
+
+    [Fact]
+    public void GetRemoteSteamId_ReturnsFakeRemoteId()
+    {
+        var core = MakeCore(out var fake);
+        core.CreateHost();
+        var steamId = core.GetRemoteSteamId(connection: 1);
+        Assert.Equal(fake.RemoteSteamId, steamId);
+    }
 }
