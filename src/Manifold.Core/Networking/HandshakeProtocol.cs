@@ -72,6 +72,22 @@ internal static class HandshakeProtocol
         if (!PacketHeader.TryDecode(data, out var hdr)) return false;
         return hdr.Kind == PacketKind.HandshakeAck;
     }
+
+    /// <summary>
+    /// Extracts the assigned Godot peer ID from a handshake payload that has already
+    /// had the 2-byte <see cref="PacketHeader"/> stripped by <c>ProcessMessage</c>.
+    /// The payload is just the 4-byte little-endian int32 peer ID.
+    /// </summary>
+    /// <param name="payload">Post-header payload bytes (expected: 4 bytes).</param>
+    /// <param name="peerId">The extracted Godot peer ID on success.</param>
+    /// <returns><c>true</c> if parsing succeeded; <c>false</c> if payload is too short or peer ID is invalid.</returns>
+    internal static bool TryParseHandshakePayload(ReadOnlySpan<byte> payload, out int peerId)
+    {
+        peerId = 0;
+        if (payload.Length < sizeof(int)) return false;
+        peerId = BinaryPrimitives.ReadInt32LittleEndian(payload);
+        return peerId >= 2; // peer IDs < 2 are malformed
+    }
 }
 
 /// <summary>

@@ -87,6 +87,7 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension, ISteamPeer
 
     private readonly Queue<ReceivedPacket> _incoming = new();
     private ReceivedPacket _currentPacket;  // set during _GetPacketScript, used by _GetPacketPeer etc.
+    private readonly List<ReceivedPacket> _pollBuffer = new();  // reused each frame to avoid per-tick allocation
 
     // ── Disconnect info ───────────────────────────────────────────────────────
 
@@ -205,7 +206,7 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension, ISteamPeer
     public override void _SetTargetPeer(int pPeer) => _targetPeer = pPeer;
 
     /// <inheritdoc/>
-    public override int _GetMaxPacketSize() => 524_288; // Steam ISteamNetworkingSockets reliable message cap (512 KB)
+    public override int _GetMaxPacketSize() => 1_048_576; // Steam ISteamNetworkingSockets reliable message cap (MASTER_DESIGN §8.4)
 
     /// <inheritdoc/>
     public override int _GetAvailablePacketCount() => _incoming.Count;
@@ -312,10 +313,10 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension, ISteamPeer
     {
         if (_state is PeerState.Idle or PeerState.Disconnected) return;
 
-        var pending = new System.Collections.Generic.List<ReceivedPacket>();
-        _core.DrainMessages(pending);
+        _pollBuffer.Clear();
+        _core.DrainMessages(_pollBuffer);
 
-        foreach (var pkt in pending)
+        foreach (var pkt in _pollBuffer)
         {
             switch (pkt.Kind)
             {
@@ -325,9 +326,10 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension, ISteamPeer
                     break;
 
                 case PacketKind.Handshake when !_isServer:
-                    // Client receives peer ID assignment from server
-                    int spanLen = pkt.Size > 0 ? pkt.Size : pkt.Buffer.Length;
-                    if (HandshakeProtocol.TryParseHandshake(pkt.Buffer.AsSpan(0, spanLen), out int peerId))
+                    // Client receives peer ID assignment from server.
+                    // ProcessMessage already stripped the 2-byte header; the buffer
+                    // contains only the 4-byte little-endian peer ID payload.
+                    if (HandshakeProtocol.TryParseHandshakePayload(pkt.Buffer.AsSpan(0, pkt.Size), out int peerId))
                     {
                         _uniqueId = peerId;
 
@@ -351,6 +353,7 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension, ISteamPeer
                     break;
 
                 case PacketKind.HandshakeAck when _isServer:
+                    // ProcessMessage already decoded the kind; no payload to parse.
                     if (_pendingHandshakes.TryGetValue(pkt.Connection, out var hs))
                     {
                         hs.MarkComplete();

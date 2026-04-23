@@ -145,6 +145,46 @@ public class HandshakeProtocolTests
         Assert.Equal(originalPeerId, parsedPeerId);
     }
 
+    // ─── TryParseHandshakePayload (post-header payload only) ──────────────────
+
+    [Theory]
+    [InlineData(2)]
+    [InlineData(42)]
+    [InlineData(255)]
+    [InlineData(65536)]
+    public void TryParseHandshakePayload_ValidPayload_RoundTrips(int originalPeerId)
+    {
+        // Build a full handshake, then strip the 2-byte header to simulate
+        // what ProcessMessage delivers to _Poll().
+        var fullPacket = HandshakeProtocol.BuildHandshake(originalPeerId);
+        var payload = fullPacket.AsSpan(PacketHeader.Size);
+
+        var ok = HandshakeProtocol.TryParseHandshakePayload(payload, out int parsedId);
+        Assert.True(ok);
+        Assert.Equal(originalPeerId, parsedId);
+    }
+
+    [Fact]
+    public void TryParseHandshakePayload_TooShort_ReturnsFalse()
+    {
+        ReadOnlySpan<byte> data = stackalloc byte[] { 0x02, 0x00, 0x00 }; // 3 bytes, need 4
+        Assert.False(HandshakeProtocol.TryParseHandshakePayload(data, out _));
+    }
+
+    [Fact]
+    public void TryParseHandshakePayload_PeerIdLessThan2_ReturnsFalse()
+    {
+        // peerId=1 as int32 LE
+        ReadOnlySpan<byte> data = stackalloc byte[] { 0x01, 0x00, 0x00, 0x00 };
+        Assert.False(HandshakeProtocol.TryParseHandshakePayload(data, out _));
+    }
+
+    [Fact]
+    public void TryParseHandshakePayload_Empty_ReturnsFalse()
+    {
+        Assert.False(HandshakeProtocol.TryParseHandshakePayload(ReadOnlySpan<byte>.Empty, out _));
+    }
+
     // ─── Sad-path / duplicate ACK tests ──────────────────────────────────────
 
     [Fact]
