@@ -103,12 +103,16 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension
 
     // ── Constructor ───────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Creates a <see cref="SteamMultiplayerPeer"/> using a stub backend.
+    /// Production use requires the live Steam backend to be wired in (see TODO below).
+    /// Use the internal <c>(INetworkingBackend)</c> overload for direct test injection.
+    /// </summary>
     public SteamMultiplayerPeer()
     {
-        // Uses FakeSteamBackend via INetworkingBackend; production uses LiveSteamNetworkingBackend.
-        // For now, we allow injection via the constructor overload below for tests.
         _core = new SteamNetworkingCore(new FakeSteamBackend());
-        // TODO (Task 17): Register with SteamPeerRegistry for lifecycle hook
+        // TODO (Phase 3): wire LiveSteamNetworkingBackend when SteamLifecycle is initialized (replace FakeSteamBackend).
+        // TODO (Task 17): Register with SteamPeerRegistry for lifecycle hook.
     }
 
     // ── Constructor for injection (tests / advanced use) ─────────────────────
@@ -158,6 +162,11 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension
     public override MultiplayerPeer.TransferModeEnum _GetTransferMode() => _transferMode;
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <see cref="MultiplayerPeer.TransferModeEnum.UnreliableOrdered"/> has no native Steam equivalent
+    /// and is silently degraded to unordered unreliable with a one-time editor warning.
+    /// (MASTER_DESIGN §8.2)
+    /// </remarks>
     public override void _SetTransferMode(MultiplayerPeer.TransferModeEnum pMode)
     {
         if (pMode == MultiplayerPeer.TransferModeEnum.UnreliableOrdered && !_unreliableOrderedWarned)
