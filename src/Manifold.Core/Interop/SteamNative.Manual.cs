@@ -12,11 +12,15 @@ internal static partial class SteamNative
 {
     // ── ConnectP2P — manually implemented (ManifoldGen skipped: SteamNetworkingIdentity& param) ──
 
-    // Identity type constant for the SteamID64 variant
-    private const int k_ESteamNetworkingIdentityType_SteamID64 = 16;
+    // Identity type constant for the SteamID64 variant.
+    // Sourced from Steamworks SDK 1.64 steamnetworkingtypes.h: k_ESteamNetworkingIdentityType_SteamID64 = 16.
+    // ⚠ Verify on every SDK upgrade.
+    internal const int k_ESteamNetworkingIdentityType_SteamID64 = 16;
 
-    // SteamNetworkingIdentity total struct size (136 bytes, per SDK headers)
-    private const int SteamNetworkingIdentitySize = 136;
+    // Total size of SteamNetworkingIdentity in bytes.
+    // Sourced from Steamworks SDK 1.64 steamnetworkingtypes.h: sizeof(SteamNetworkingIdentity) = 136.
+    // ⚠ Verify on every SDK upgrade — Valve has changed struct layouts before without announcement.
+    internal const int SteamNetworkingIdentitySize = 136;
 
     /// <summary>
     /// Initiates a P2P connection to a remote peer identified by their Steam64 ID.
@@ -50,9 +54,21 @@ internal static partial class SteamNative
         *(int*)(identity + 4) = sizeof(ulong);  // 8
         *(ulong*)(identity + 8) = remoteSteamId64;
 
+        // pOptions is a SteamNetworkingConfigValue_t* array for per-connection options.
+        // Passing IntPtr.Zero (nOptions=0) uses Steam's defaults — sufficient for standard P2P games.
         return ConnectP2P_Native(self, identity, nRemoteVirtualPort, nOptions, IntPtr.Zero);
     }
 
+    // DllImport used instead of LibraryImport: the byte* pIdentity parameter is a raw unsafe pointer
+    // with no marshalling transform needed. LibraryImport's source generator does not support
+    // unsafe pointer parameters without additional generated wrappers, making DllImport the correct
+    // and simpler choice for this hand-written unsafe interop entry. See MASTER_DESIGN §6 (§1).
+    /// <summary>
+    /// Raw P/Invoke entry for <c>SteamAPI_ISteamNetworkingSockets_ConnectP2P</c>.
+    /// <c>pIdentity</c> must point to a populated <c>SteamNetworkingIdentity</c> buffer (136 bytes).
+    /// <c>pOptions</c> is a pointer to a <c>SteamNetworkingConfigValue_t</c> array; pass <see cref="IntPtr.Zero"/> for defaults.
+    /// Returns 0 (<c>k_HSteamNetConnection_Invalid</c>) on failure.
+    /// </summary>
     [DllImport(LibName,
                EntryPoint = "SteamAPI_ISteamNetworkingSockets_ConnectP2P",
                CallingConvention = CallingConvention.Cdecl)]

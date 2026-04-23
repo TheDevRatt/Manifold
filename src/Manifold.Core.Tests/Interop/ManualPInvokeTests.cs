@@ -2,6 +2,7 @@
 // These are logic/layout tests — they do not call native Steam code.
 
 using System;
+using Manifold.Core.Interop;
 using Xunit;
 
 namespace Manifold.Core.Tests.Interop;
@@ -14,28 +15,19 @@ public unsafe class ManualPInvokeTests
     /// pass garbage to the native layer.
     /// </summary>
     [Fact]
-    public void SteamNetworkingIdentity_SteamId64Type_Constant_Is_16()
+    public void SteamNetworkingIdentity_SteamId64TypeConstant_Matches_SdkValue()
     {
-        // k_ESteamNetworkingIdentityType_SteamID64 = 16 in steamnetworkingtypes.h
-        // Verified against SDK 1.64 header.
-        Assert.Equal(16, 0x10); // sanity — hex to decimal
+        // k_ESteamNetworkingIdentityType_SteamID64 = 16 per SDK 1.64 steamnetworkingtypes.h
+        Assert.Equal(16, SteamNative.k_ESteamNetworkingIdentityType_SteamID64);
     }
 
     [Fact]
-    public void SteamNetworkingIdentity_SteamId64_SizeOf_Is_8()
+    public void SteamNetworkingIdentity_StructSize_Matches_SdkValue()
     {
-        // sizeof(uint64) = 8; this is what we write into m_cbSize
+        // Total struct size = 136 bytes per SDK 1.64 steamnetworkingtypes.h
+        // sizeof(ulong) = 8 — the size written into m_cbSize for the SteamID64 variant
+        Assert.Equal(136, SteamNative.SteamNetworkingIdentitySize);
         Assert.Equal(8, sizeof(ulong));
-    }
-
-    [Fact]
-    public void SteamNetworkingIdentity_BufferSize_Is_136_Bytes()
-    {
-        // SteamNetworkingIdentitySize = 136 as per SDK headers
-        // If this assumption is wrong the native call will read past our buffer or miss fields.
-        // Validated against SDK 1.64 steamnetworkingtypes.h sizeof(SteamNetworkingIdentity).
-        const int expectedSize = 136;
-        Assert.Equal(136, expectedSize); // explicit documentation test
     }
 
     [Fact]
@@ -48,6 +40,8 @@ public unsafe class ManualPInvokeTests
 
         const int expectedType = 16;   // k_ESteamNetworkingIdentityType_SteamID64
         const int expectedSize8 = 8;   // sizeof(ulong)
+        // Synthetic Steam64 ID — valid range, not a real user account.
+        // Base value 76561197960265728 + offset = valid Steam64 ID structure.
         const ulong testId = 76561198000000001UL;
 
         *(int*)(buf + 0) = expectedType;
