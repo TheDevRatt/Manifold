@@ -36,6 +36,9 @@ internal readonly struct PacketHeader
     /// <param name="version">Protocol version. Must be 0 in the current protocol.</param>
     public PacketHeader(PacketKind kind, byte channel, byte version = 0)
     {
+        if (version > 0x0F)
+            throw new ArgumentOutOfRangeException(nameof(version),
+                $"Version must be 0–15 (nibble range). Got: {version}.");
         Version = version;
         Kind    = kind;
         Channel = channel;
@@ -44,6 +47,7 @@ internal readonly struct PacketHeader
     /// <summary>
     /// Encodes this header into the first 2 bytes of <paramref name="destination"/>.
     /// </summary>
+    /// <param name="destination">The buffer to write into. Must be at least <see cref="Size"/> bytes.</param>
     /// <exception cref="ArgumentException">Thrown if <paramref name="destination"/> is shorter than 2 bytes.</exception>
     public void Encode(Span<byte> destination)
     {

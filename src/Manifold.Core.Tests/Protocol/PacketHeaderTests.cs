@@ -57,7 +57,7 @@ public class PacketHeaderTests
     }
 
     [Fact]
-    public void Encode_WithNonZeroVersion_EncodeVersionInUpperNibble()
+    public void Encode_WithNonZeroVersion_EncodesVersionInUpperNibble()
     {
         // version=1, kind=Handshake(0x1), channel=0  →  byte0 = 0x11
         var header = new PacketHeader(PacketKind.Handshake, channel: 0, version: 1);
@@ -123,44 +123,45 @@ public class PacketHeaderTests
 
     // ─── Round-trips ───────────────────────────────────────────────────────────
 
-    [Fact]
-    public void Encode_ThenDecode_RoundTripsAllKinds()
+    [Theory]
+    [InlineData((int)PacketKind.Data)]
+    [InlineData((int)PacketKind.Handshake)]
+    [InlineData((int)PacketKind.HandshakeAck)]
+    [InlineData((int)PacketKind.Disconnect)]
+    public void Encode_ThenDecode_RoundTrips_Kind(int kindValue)
     {
-        var kinds = new[] { PacketKind.Data, PacketKind.Handshake, PacketKind.HandshakeAck, PacketKind.Disconnect };
-        Span<byte> buf = stackalloc byte[2];
-
-        foreach (var kind in kinds)
-        {
-            var original = new PacketHeader(kind, channel: 42);
-            original.Encode(buf);
-            bool ok = PacketHeader.TryDecode(buf, out var decoded);
-
-            Assert.True(ok);
-            Assert.Equal(original.Version, decoded.Version);
-            Assert.Equal(original.Kind,    decoded.Kind);
-            Assert.Equal(original.Channel, decoded.Channel);
-        }
+        var kind = (PacketKind)kindValue;
+        var hdr = new PacketHeader(kind, channel: 0);
+        Span<byte> buf = stackalloc byte[PacketHeader.Size];
+        hdr.Encode(buf);
+        Assert.True(PacketHeader.TryDecode(buf, out var decoded));
+        Assert.Equal(kind, decoded.Kind);
+        Assert.Equal(hdr.Version, decoded.Version);
+        Assert.Equal(hdr.Channel, decoded.Channel);
     }
 
-    [Fact]
-    public void Encode_ThenDecode_RoundTrips_AllChannels_0_to_255()
+    [Theory]
+    [InlineData((byte)0)]
+    [InlineData((byte)1)]
+    [InlineData((byte)127)]
+    [InlineData((byte)255)]
+    public void Encode_ThenDecode_RoundTrips_Channel(byte channel)
     {
-        byte[] spotChannels = { 0, 1, 127, 255 };
-        Span<byte> buf = stackalloc byte[2];
-
-        foreach (byte ch in spotChannels)
-        {
-            var original = new PacketHeader(PacketKind.Data, channel: ch);
-            original.Encode(buf);
-            bool ok = PacketHeader.TryDecode(buf, out var decoded);
-
-            Assert.True(ok);
-            Assert.Equal(ch, decoded.Channel);
-            Assert.Equal(PacketKind.Data, decoded.Kind);
-        }
+        var hdr = new PacketHeader(PacketKind.Data, channel);
+        Span<byte> buf = stackalloc byte[PacketHeader.Size];
+        hdr.Encode(buf);
+        Assert.True(PacketHeader.TryDecode(buf, out var decoded));
+        Assert.Equal(channel, decoded.Channel);
     }
 
     // ─── Edge / error cases ────────────────────────────────────────────────────
+
+    [Fact]
+    public void Constructor_ThrowsArgumentOutOfRangeException_WhenVersionExceedsNibble()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new PacketHeader(PacketKind.Data, channel: 0, version: 16));
+    }
 
     [Fact]
     public void Encode_ThrowsArgumentException_WhenBufferTooShort()
@@ -173,11 +174,20 @@ public class PacketHeaderTests
     }
 
     [Fact]
-    public void VersionNibble_Is_Zero_ForDefaultConstructor()
+    public void DefaultVersionParameter_IsZero()
     {
         // Default version parameter must be 0 per current protocol
         var header = new PacketHeader(PacketKind.Data, channel: 0);
         Assert.Equal(0, header.Version);
+    }
+
+    [Fact]
+    public void Default_PacketHeader_HasZeroVersionDataKindAndZeroChannel()
+    {
+        var header = default(PacketHeader);
+        Assert.Equal(0, header.Version);
+        Assert.Equal(PacketKind.Data, header.Kind);
+        Assert.Equal((byte)0, header.Channel);
     }
 
     [Fact]
