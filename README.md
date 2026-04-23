@@ -9,7 +9,7 @@ Multiplayer.MultiplayerPeer = peer;
 // @rpc just works from here.
 ```
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![.NET 8](https://img.shields.io/badge/.NET-8-purple)](https://dotnet.microsoft.com) [![Steamworks SDK](https://img.shields.io/badge/Steamworks%20SDK-1.64-informational)](https://partner.steamgames.com) [![Tests](https://img.shields.io/badge/tests-197%20passing-brightgreen)]() [![Status](https://img.shields.io/badge/status-WIP-orange)]()
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![.NET 8](https://img.shields.io/badge/.NET-8-purple)](https://dotnet.microsoft.com) [![Steamworks SDK](https://img.shields.io/badge/Steamworks%20SDK-1.64-informational)](https://partner.steamgames.com) [![Tests](https://img.shields.io/badge/tests-201%20passing-brightgreen)]() [![Status](https://img.shields.io/badge/status-WIP-orange)]()
 
 ---
 
@@ -88,7 +88,12 @@ Drop the Steamworks SDK native libraries into your project's output directory. A
 - [x] `LiveSteamInit.GetHSteamPipe` uses correct `SteamAPI_GetHSteamPipe()` (not `HSteamUser`)
 - [x] `CallResultAwaiter` idempotent/thread-safe `Dispose()`
 - [x] `ProblemDetectedLocally` correctly reported as `WasLocalClose = true`
-- [x] Unit + integration tests (197 passing via `FakeSteamBackend`)
+- [x] Unit + integration tests (201 passing via `FakeSteamBackend`)
+- [x] `PacketHeader.TryDecode` rejects unknown kinds (0x4–0xF) and non-zero version
+- [x] `SteamNetworkingCore.Close` closes accepted connections before `CloseListenSocket`
+- [x] `SteamPeerRegistry` late-registration guard (shutting-down flag)
+- [x] `CallbackDispatcher.CancelAll` no longer double-invokes raw handlers with `IntPtr.Zero`
+- [x] `CallbackDispatcher.Tick` reentrancy guard — exits cleanly if `Dispose` called from a handler
 - [ ] End-to-end loopback: two peers connect via live Steam P2P — manual gate
 
 ### Phase 3: Packaging & CI
