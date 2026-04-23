@@ -18,10 +18,10 @@ namespace Manifold.Core.Networking;
 internal static class HandshakeProtocol
 {
     /// <summary>Total size in bytes of the server→client handshake packet (header + peer ID).</summary>
-    public const int HandshakePacketSize = 6; // PacketHeader.Size(2) + sizeof(int)(4)
+    internal const int HandshakePacketSize = 6; // PacketHeader.Size(2) + sizeof(int)(4)
 
     /// <summary>Total size in bytes of the client→server acknowledgement packet.</summary>
-    public const int AckPacketSize = PacketHeader.Size; // 2
+    internal const int AckPacketSize = PacketHeader.Size; // 2
 
     /// <summary>
     /// Builds the server→client handshake packet for the given Godot peer ID.
@@ -75,7 +75,7 @@ internal static class HandshakeProtocol
 }
 
 /// <summary>
-/// Tracks the handshake state for a single connecting peer, including the 5-second timeout.
+/// Tracks the handshake state for a single connecting peer, including a configurable peer-connection timeout (default: 5 s).
 /// (MASTER_DESIGN §8.7)
 /// </summary>
 internal sealed class HandshakeState
@@ -93,6 +93,9 @@ internal sealed class HandshakeState
     /// </summary>
     internal bool IsExpired => !IsComplete && DateTime.UtcNow >= _deadline;
 
+    /// <summary>
+    /// Initialises a new handshake state with the given (or default 5-second) timeout.
+    /// </summary>
     /// <param name="timeout">Override for the default 5-second timeout (useful in tests).</param>
     internal HandshakeState(TimeSpan? timeout = null)
         => _deadline = DateTime.UtcNow + (timeout ?? DefaultTimeout);

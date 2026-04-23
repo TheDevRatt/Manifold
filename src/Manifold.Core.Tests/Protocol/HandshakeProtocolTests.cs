@@ -15,7 +15,7 @@ public class HandshakeProtocolTests
         // header: [0x01, 0x00], peerId=2 as int32 LE: [0x02, 0x00, 0x00, 0x00]
         var bytes = HandshakeProtocol.BuildHandshake(2);
 
-        Assert.Equal(6, bytes.Length);
+        Assert.Equal(HandshakeProtocol.HandshakePacketSize, bytes.Length);
         Assert.Equal(0x01, bytes[0]); // PacketKind.Handshake, version=0
         Assert.Equal(0x00, bytes[1]); // channel=0
         Assert.Equal(0x02, bytes[2]); // int32 LE: 2
@@ -30,7 +30,7 @@ public class HandshakeProtocolTests
         // peerId=256 → int32 LE: [0x00, 0x01, 0x00, 0x00]
         var bytes = HandshakeProtocol.BuildHandshake(256);
 
-        Assert.Equal(6, bytes.Length);
+        Assert.Equal(HandshakeProtocol.HandshakePacketSize, bytes.Length);
         Assert.Equal(0x01, bytes[0]);
         Assert.Equal(0x00, bytes[1]);
         Assert.Equal(0x00, bytes[2]); // int32 LE: 256
@@ -39,12 +39,13 @@ public class HandshakeProtocolTests
         Assert.Equal(0x00, bytes[5]);
     }
 
-    [Fact]
-    public void BuildHandshake_Throws_WhenPeerIdIsLessThan2()
+    [Theory]
+    [InlineData(1)]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void BuildHandshake_Throws_WhenPeerIdIsLessThan2(int invalidId)
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => HandshakeProtocol.BuildHandshake(1));
-        Assert.Throws<ArgumentOutOfRangeException>(() => HandshakeProtocol.BuildHandshake(0));
-        Assert.Throws<ArgumentOutOfRangeException>(() => HandshakeProtocol.BuildHandshake(-1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => HandshakeProtocol.BuildHandshake(invalidId));
     }
 
     // ─── BuildAck ─────────────────────────────────────────────────────────────
@@ -54,7 +55,7 @@ public class HandshakeProtocolTests
     {
         var bytes = HandshakeProtocol.BuildAck();
 
-        Assert.Equal(2, bytes.Length);
+        Assert.Equal(HandshakeProtocol.AckPacketSize, bytes.Length);
         Assert.Equal(0x02, bytes[0]); // PacketKind.HandshakeAck, version=0
         Assert.Equal(0x00, bytes[1]); // channel=0
     }
