@@ -74,17 +74,20 @@ Drop the Steamworks SDK native libraries into your project's output directory. A
 - [x] Native struct size validator: catches packing bugs against real SDK headers at build time
 - [x] 80 contract tests
 
-### Phase 2: Godot Integration ✅
+### Phase 2: Networking Core *(implementation in progress — bugs being fixed)*
+
+> **Note:** The networking primitives are implemented and tested via `FakeSteamBackend`. Several correctness bugs have been identified and are being addressed before this phase is marked complete. The production Steam backend is not yet wired into `SteamMultiplayerPeer`'s public constructor — that is a Phase 3 task once `SteamLifecycle` integration is complete.
 
 - [x] `PacketHeader` (2-byte encode/decode, version + kind + channel)
 - [x] `HandshakeProtocol` (server→client peer ID assignment, 5-second timeout)
 - [x] `PeerIdMapper` (bidirectional SteamId ↔ connection ↔ Godot ID)
 - [x] `SteamNetworkingCore` (internal `ISteamNetworkingSockets` wrapper, receive pipeline)
-- [x] `SteamMultiplayerPeer` (all 21 overrides, full state machine, disconnect info, `UnreliableOrdered` warning)
+- [x] `SteamMultiplayerPeer` scaffold (all 21 overrides, state machine, disconnect info, `UnreliableOrdered` warning)
 - [x] `SteamLobbySession` scaffold (Phase 3 stubs)
 - [x] `SteamPeerRegistry` + `ISteamPeer` (lifecycle shutdown integration)
-- [x] State machine, protocol, and integration tests (197 passing)
-- [ ] End-to-end loopback: two peers connect via Steam P2P — manual gate (requires live Steam session)
+- [x] Unit + integration tests (197 passing via `FakeSteamBackend`)
+- [x] Correctness bugs fixed (client broadcast, server registration, close signal propagation, exception safety)
+- [ ] End-to-end loopback: two peers connect via live Steam P2P — manual gate
 
 ### Phase 3: Packaging & CI
 
