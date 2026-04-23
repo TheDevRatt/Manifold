@@ -171,8 +171,8 @@ public sealed class SteamLifecycle : IDisposable
         // Step 2 — cancel all pending CallResultAwaiter completions
         CallResultAwaiter.CancelAll(new SteamShutdownException());
 
-        // Step 3 — transition active SteamMultiplayerPeer instances (stub/no-op for now)
-        // SteamPeerRegistry.ShutdownAll();
+        // Step 3 — transition active SteamMultiplayerPeer instances to Disconnected state
+        SteamPeerRegistry.ShutdownAll();
 
         // Step 4 — clear all CallbackDispatcher handler registrations
         CallbackDispatcher.CancelAll(new SteamShutdownException());

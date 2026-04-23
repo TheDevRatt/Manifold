@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Manifold.Core;
+using Manifold.Core.Dispatch;
 using Manifold.Core.Interop;
 using Manifold.Core.Networking;
 using Manifold.Core.Testing;
@@ -19,7 +20,7 @@ namespace Manifold.Godot.Networking;
 /// <c>ISteamNetworkingSockets</c> P2P networking layer.
 /// (MASTER_DESIGN §8.10)
 /// </summary>
-public partial class SteamMultiplayerPeer : MultiplayerPeerExtension
+public partial class SteamMultiplayerPeer : MultiplayerPeerExtension, ISteamPeer
 {
     // ── Internal connection state machine ────────────────────────────────────
 
@@ -115,7 +116,7 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension
     {
         _core = new SteamNetworkingCore(new FakeSteamBackend());
         // TODO (Phase 3): wire LiveSteamNetworkingBackend when SteamLifecycle is initialized (replace FakeSteamBackend).
-        // TODO (Task 17): Register with SteamPeerRegistry for lifecycle hook.
+        SteamPeerRegistry.Register(this);
 
         // Subscribe to core events
         _core.IncomingConnection      += OnIncomingConnection;
@@ -128,6 +129,7 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension
     internal SteamMultiplayerPeer(INetworkingBackend backend)
     {
         _core = new SteamNetworkingCore(backend);
+        SteamPeerRegistry.Register(this);
 
         // Subscribe to core events
         _core.IncomingConnection      += OnIncomingConnection;
@@ -434,6 +436,7 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension
     {
         if (_state is PeerState.Idle or PeerState.Disconnected) return;
 
+        SteamPeerRegistry.Unregister(this);
         _state = PeerState.Disconnecting;
 
         _core.Close();
@@ -461,6 +464,11 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension
         EmitSignal(MultiplayerPeer.SignalName.PeerDisconnected, (long)pPeer);
         EmitSignalPeerDisconnectedWithReason(pPeer, 0, "Disconnected by server", wasLocal: true);
     }
+
+    // ── ISteamPeer (MASTER_DESIGN §4 Shutdown Contract Step 3) ───────────────
+
+    /// <inheritdoc/>
+    void ISteamPeer.ForceDisconnect() => _Close();
 
     // ── Internal helpers ──────────────────────────────────────────────────────
 
