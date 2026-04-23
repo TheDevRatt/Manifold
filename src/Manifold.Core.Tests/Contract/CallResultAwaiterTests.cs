@@ -9,6 +9,9 @@ using Xunit;
 
 namespace Manifold.Core.Tests.Contract;
 
+// CallResultAwaiter tests share the static CallResultAwaiter registry with
+// SteamLifecycleTests (which calls CancelAll on Dispose). Run sequentially.
+[Collection("SteamLifecycle")]
 public sealed class CallResultAwaiterTests
 {
     private readonly CallbackDispatcher _dispatcher = new();

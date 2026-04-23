@@ -1,7 +1,9 @@
 // Manifold — SteamLifecycle contract tests
 
 using System;
+using System.Threading.Tasks;
 using Manifold.Core.Dispatch;
+using Manifold.Core.Interop;
 using Manifold.Core.Lifecycle;
 using Xunit;
 
@@ -43,7 +45,7 @@ public sealed class SteamLifecycleTests : IDisposable
         currentField?.SetValue(null, null);
     }
 
-    // Helper: create a lifecycle and call Initialize on it, wiring up to _lifecycle.
+    // Helper: create a lifecycle and call InitializeCore on it, wiring up to _lifecycle.
     private SteamLifecycle CreateAndInitialize(
         FakeSteamInit? init = null,
         SteamInitOptions? opts = null)
@@ -52,7 +54,7 @@ public sealed class SteamLifecycleTests : IDisposable
         opts ??= new SteamInitOptions();
         var dispatcher = new CallbackDispatcher();
         var lc         = new SteamLifecycle(init, dispatcher);
-        var result     = lc.Initialize(opts);
+        var result     = lc.InitializeCore(opts);
         Assert.True(result.IsSuccess, result.Error);
         _lifecycle = lc;
         return lc;
@@ -67,7 +69,7 @@ public sealed class SteamLifecycleTests : IDisposable
         var dispatcher = new CallbackDispatcher();
         var lc         = new SteamLifecycle(init, dispatcher);
 
-        var result = lc.Initialize(new SteamInitOptions());
+        var result = lc.InitializeCore(new SteamInitOptions());
 
         Assert.True(result.IsSuccess);
         _lifecycle = lc;
@@ -144,7 +146,7 @@ public sealed class SteamLifecycleTests : IDisposable
         var dispatcher = new CallbackDispatcher();
         var lc         = new SteamLifecycle(init, dispatcher);
 
-        var result = lc.Initialize(new SteamInitOptions());
+        var result = lc.InitializeCore(new SteamInitOptions());
 
         Assert.False(result.IsSuccess);
         Assert.Contains("SteamAPI_Init()", result.Error);
@@ -160,7 +162,7 @@ public sealed class SteamLifecycleTests : IDisposable
         var dispatcher = new CallbackDispatcher();
         var lc         = new SteamLifecycle(init, dispatcher);
 
-        var result = lc.Initialize(new SteamInitOptions());
+        var result = lc.InitializeCore(new SteamInitOptions());
 
         Assert.False(result.IsSuccess);
     }
@@ -175,7 +177,7 @@ public sealed class SteamLifecycleTests : IDisposable
         var init2       = new FakeSteamInit();
         var dispatcher2 = new CallbackDispatcher();
         var lc2         = new SteamLifecycle(init2, dispatcher2);
-        var result2     = lc2.Initialize(new SteamInitOptions());
+        var result2     = lc2.InitializeCore(new SteamInitOptions());
 
         Assert.False(result2.IsSuccess);
         Assert.Equal("SteamLifecycle is already initialized.", result2.Error);
@@ -191,7 +193,7 @@ public sealed class SteamLifecycleTests : IDisposable
         var init2       = new FakeSteamInit();
         var dispatcher2 = new CallbackDispatcher();
         var lc2         = new SteamLifecycle(init2, dispatcher2);
-        var result2     = lc2.Initialize(new SteamInitOptions());
+        var result2     = lc2.InitializeCore(new SteamInitOptions());
 
         Assert.False(result2.IsSuccess);
         Assert.Contains("disposed", result2.Error, StringComparison.OrdinalIgnoreCase);
@@ -236,7 +238,7 @@ public sealed class SteamLifecycleTests : IDisposable
         var lc         = new SteamLifecycle(init, dispatcher);
         lc.Initialized += () => raised = true;
 
-        var result = lc.Initialize(new SteamInitOptions());
+        var result = lc.InitializeCore(new SteamInitOptions());
         _lifecycle = lc;
 
         Assert.True(result.IsSuccess);
@@ -264,7 +266,7 @@ public sealed class SteamLifecycleTests : IDisposable
         var lc         = new SteamLifecycle(init, dispatcher);
         lc.FatalError += ex => captured = ex;
 
-        var result = lc.Initialize(new SteamInitOptions());
+        var result = lc.InitializeCore(new SteamInitOptions());
 
         Assert.False(result.IsSuccess);
         Assert.IsType<InvalidOperationException>(captured);
@@ -299,5 +301,31 @@ public sealed class SteamLifecycleTests : IDisposable
         var lc   = CreateAndInitialize(init);
 
         Assert.Equal(76561198012345678UL, lc.LocalUser.Value);
+    }
+
+    // ── Shutdown Step 2 — fault pending CallResultAwaiters ───────────────────
+
+    [Fact]
+    public async Task Dispose_FaultsPendingCallResultAwaiters_WithSteamShutdownException()
+    {
+        var init       = new FakeSteamInit();
+        var dispatcher = new CallbackDispatcher();
+        var lc         = new SteamLifecycle(init, dispatcher);
+        var initResult = lc.InitializeCore(new SteamInitOptions());
+        Assert.True(initResult.IsSuccess);
+        _lifecycle = lc;
+
+        // Create a pending awaiter — never deliver a result so it stays pending
+        using var awaiter = CallResultAwaiter<SteamServersConnected_t>.Create(
+            dispatcher, callHandle: 42, timeout: TimeSpan.FromSeconds(30));
+
+        // Dispose triggers Step 2: all pending awaiters must be faulted
+        lc.Dispose();
+        _lifecycle = null;
+
+        var ex = await Assert.ThrowsAsync<SteamShutdownException>(
+            () => awaiter.Task.WaitAsync(TimeSpan.FromSeconds(2)));
+
+        Assert.NotNull(ex);
     }
 }

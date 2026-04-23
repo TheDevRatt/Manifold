@@ -82,15 +82,20 @@ public sealed class SteamLifecycle : IDisposable
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
     }
 
-    // ── Instance Initialize ───────────────────────────────────────────────────
+    // ── Instance Initialize (internal) ───────────────────────────────────────
 
     /// <summary>
     /// Initialises Steam on this instance.
     /// Only one call per process lifetime is allowed — subsequent calls (even after
     /// <see cref="Dispose"/>) always return <see cref="Result{T}.Fail"/>.
     /// </summary>
+    /// <remarks>
+    /// This method is <c>internal</c>. External callers should use the static
+    /// <see cref="Initialize(SteamInitOptions)"/> factory which creates, inits, and returns
+    /// a fully-initialised lifecycle. Test code may call this directly via InternalsVisibleTo.
+    /// </remarks>
     /// <param name="options">Configuration options.</param>
-    public Result<SteamLifecycle> Initialize(SteamInitOptions options)
+    internal Result<SteamLifecycle> InitializeCore(SteamInitOptions options)
     {
         options ??= new SteamInitOptions();
 
@@ -119,16 +124,16 @@ public sealed class SteamLifecycle : IDisposable
     // ── Static factory ────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Convenience factory: creates a <see cref="SteamLifecycle"/> backed by
-    /// <see cref="LiveSteamInit"/> and a fresh <see cref="CallbackDispatcher"/>,
-    /// then calls <see cref="Initialize(SteamInitOptions)"/> on it.
+    /// Creates a <see cref="SteamLifecycle"/> backed by <see cref="LiveSteamInit"/> and a
+    /// fresh <see cref="CallbackDispatcher"/>, initialises it, and returns it on success.
     /// Only one call per process lifetime is allowed.
     /// </summary>
-    public static Result<SteamLifecycle> CreateAndInitialize(SteamInitOptions options)
+    /// <param name="options">Configuration options.</param>
+    public static Result<SteamLifecycle> Initialize(SteamInitOptions options)
     {
         options ??= new SteamInitOptions();
         var lifecycle = new SteamLifecycle(new LiveSteamInit(), new CallbackDispatcher());
-        return lifecycle.Initialize(options);
+        return lifecycle.InitializeCore(options);
     }
 
     // ── Per-frame pump ────────────────────────────────────────────────────────
@@ -161,8 +166,7 @@ public sealed class SteamLifecycle : IDisposable
         _disposed = true;
 
         // Step 2 — cancel all pending CallResultAwaiter completions
-        // (a dedicated CallResultRegistry will be added in a later task;
-        //  for now CancelAll handles subscriptions)
+        CallResultAwaiter.CancelAll(new SteamShutdownException());
 
         // Step 3 — transition active SteamMultiplayerPeer instances (stub/no-op for now)
         // SteamPeerRegistry.ShutdownAll();

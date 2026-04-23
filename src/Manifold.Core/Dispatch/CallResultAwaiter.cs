@@ -1,10 +1,47 @@
 // Bridges a Steam SteamAPICall_t handle to a C# Task<T> with CancellationToken + timeout.
 
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace Manifold.Core.Dispatch;
+
+/// <summary>
+/// Non-generic static registry for <see cref="CallResultAwaiter{T}"/> instances.
+/// Allows all pending awaiters to be faulted at once (e.g., on Steam shutdown).
+/// </summary>
+public static class CallResultAwaiter
+{
+    private static readonly List<Action<Exception>> _activeCancellers = new();
+    private static readonly object _cancelLock = new();
+
+    internal static void RegisterCanceller(Action<Exception> cancel)
+    {
+        lock (_cancelLock) _activeCancellers.Add(cancel);
+    }
+
+    internal static void UnregisterCanceller(Action<Exception> cancel)
+    {
+        lock (_cancelLock) _activeCancellers.Remove(cancel);
+    }
+
+    /// <summary>
+    /// Faults all pending <see cref="CallResultAwaiter{T}"/> tasks with the given exception.
+    /// Clears the registry. Safe to call multiple times (idempotent after first call empties it).
+    /// </summary>
+    /// <param name="reason">The exception to fault pending tasks with.</param>
+    public static void CancelAll(Exception reason)
+    {
+        List<Action<Exception>> snapshot;
+        lock (_cancelLock)
+        {
+            snapshot = new(_activeCancellers);
+            _activeCancellers.Clear();
+        }
+        foreach (var c in snapshot) c(reason);
+    }
+}
 
 /// <summary>
 /// Awaits a Steam async call result identified by a <c>SteamAPICall_t</c> handle.
@@ -21,6 +58,7 @@ public sealed class CallResultAwaiter<T> : IDisposable where T : unmanaged
     private readonly IDisposable _subscription;
     private readonly CancellationTokenRegistration _ctReg;
     private readonly CancellationTokenSource? _timeoutCts;
+    private readonly Action<Exception> _canceller;
     private int _settled; // 0 = pending, 1 = settled (CAS guard)
 
     /// <summary>
@@ -70,6 +108,10 @@ public sealed class CallResultAwaiter<T> : IDisposable where T : unmanaged
                 TrySettle(() => _tcs.TrySetCanceled()),
                 useSynchronizationContext: false);
         }
+
+        // Register global shutdown canceller — faults TCS with the provided exception
+        _canceller = ex => TrySettle(() => _tcs.TrySetException(ex));
+        CallResultAwaiter.RegisterCanceller(_canceller);
     }
 
     /// <summary>
@@ -81,6 +123,7 @@ public sealed class CallResultAwaiter<T> : IDisposable where T : unmanaged
     /// <inheritdoc/>
     public void Dispose()
     {
+        CallResultAwaiter.UnregisterCanceller(_canceller);
         _subscription.Dispose();
         _ctReg.Dispose();
         _timeoutCts?.Dispose();
