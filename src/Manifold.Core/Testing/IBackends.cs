@@ -1,5 +1,7 @@
 // Backend capability interfaces — one per Steam API subsystem.
 
+using System;
+
 namespace Manifold.Core.Testing;
 
 /// <summary>
@@ -79,4 +81,13 @@ public interface INetworkingBackend
 
     /// <summary>Closes a listen socket.</summary>
     bool CloseListenSocket(uint socket);
+
+    /// <summary>Sends a message on the given connection. Returns an EResult value (1 = OK).</summary>
+    int SendMessageToConnection(uint hConn, ReadOnlySpan<byte> data, int sendFlags);
+
+    /// <summary>Drains messages from a poll group into <paramref name="ppOut"/>. Returns message count.</summary>
+    int ReceiveMessagesOnPollGroup(uint pollGroup, IntPtr[] ppOut, int maxMessages);
+
+    /// <summary>Drains messages from a single connection into <paramref name="ppOut"/>. Returns message count.</summary>
+    int ReceiveMessagesOnConnection(uint hConn, IntPtr[] ppOut, int maxMessages);
 }

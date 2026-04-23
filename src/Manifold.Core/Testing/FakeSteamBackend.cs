@@ -1,5 +1,7 @@
 // In-memory test double for all Steam backend capability interfaces.
 
+using System;
+
 namespace Manifold.Core.Testing;
 
 /// <summary>
@@ -159,5 +161,26 @@ public class FakeSteamBackend : IUserBackend, IMatchmakingBackend, INetworkingBa
     {
         Record(nameof(CloseListenSocket));
         return true;
+    }
+
+    /// <inheritdoc/>
+    public int SendMessageToConnection(uint hConn, ReadOnlySpan<byte> data, int sendFlags)
+    {
+        Record(nameof(SendMessageToConnection));
+        return 1; // EResult.OK
+    }
+
+    /// <inheritdoc/>
+    public int ReceiveMessagesOnPollGroup(uint pollGroup, IntPtr[] ppOut, int maxMessages)
+    {
+        Record(nameof(ReceiveMessagesOnPollGroup));
+        return 0;
+    }
+
+    /// <inheritdoc/>
+    public int ReceiveMessagesOnConnection(uint hConn, IntPtr[] ppOut, int maxMessages)
+    {
+        Record(nameof(ReceiveMessagesOnConnection));
+        return 0;
     }
 }
