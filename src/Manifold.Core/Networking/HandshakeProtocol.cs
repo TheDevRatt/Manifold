@@ -80,25 +80,23 @@ internal static class HandshakeProtocol
 /// </summary>
 internal sealed class HandshakeState
 {
-    private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(5);
-
-    private readonly DateTime _deadline;
+    private readonly long _deadlineTick;
 
     /// <summary><c>true</c> if the handshake completed successfully (ACK received).</summary>
     internal bool IsComplete { get; private set; }
 
     /// <summary>
     /// <c>true</c> if the handshake timeout has elapsed without completion.
-    /// Always <c>false</c> once <see cref="IsComplete"/> is <c>true</c>.
+    /// Uses <see cref="Environment.TickCount64"/> — monotonic, NTP-immune.
     /// </summary>
-    internal bool IsExpired => !IsComplete && DateTime.UtcNow >= _deadline;
+    internal bool IsExpired => !IsComplete && Environment.TickCount64 >= _deadlineTick;
 
     /// <summary>
     /// Initialises a new handshake state with the given (or default 5-second) timeout.
     /// </summary>
-    /// <param name="timeout">Override for the default 5-second timeout (useful in tests).</param>
-    internal HandshakeState(TimeSpan? timeout = null)
-        => _deadline = DateTime.UtcNow + (timeout ?? DefaultTimeout);
+    /// <param name="timeoutMs">Override for the default 5000 ms timeout (useful in tests).</param>
+    internal HandshakeState(long timeoutMs = 5_000)
+        => _deadlineTick = Environment.TickCount64 + timeoutMs;
 
     /// <summary>Marks the handshake as successfully completed.</summary>
     internal void MarkComplete() => IsComplete = true;

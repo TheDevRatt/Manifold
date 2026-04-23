@@ -158,14 +158,14 @@ public class HandshakeStateTests
     [Fact]
     public void HandshakeState_IsNotExpired_WithinTimeout()
     {
-        var state = new HandshakeState(TimeSpan.FromSeconds(5));
+        var state = new HandshakeState(timeoutMs: 5_000);
         Assert.False(state.IsExpired);
     }
 
     [Fact]
     public void HandshakeState_IsExpired_AfterTimeout()
     {
-        var state = new HandshakeState(TimeSpan.FromMilliseconds(1));
+        var state = new HandshakeState(timeoutMs: 1);
         Thread.Sleep(10);
         Assert.True(state.IsExpired);
     }
@@ -173,7 +173,7 @@ public class HandshakeStateTests
     [Fact]
     public void HandshakeState_MarkComplete_PreventsExpiry()
     {
-        var state = new HandshakeState(TimeSpan.FromMilliseconds(1));
+        var state = new HandshakeState(timeoutMs: 1);
         state.MarkComplete();
         Thread.Sleep(10); // deadline passes
         Assert.False(state.IsExpired); // complete → never expired

@@ -31,13 +31,7 @@ public sealed class LiveSteamInit : ISteamInit
 
     /// <inheritdoc/>
     public uint GetHSteamPipe()
-    {
-        // Obtain HSteamPipe via the accessor singleton
-        var userPtr = SteamNative.SteamAPI_SteamUser_v023();
-        if (userPtr == IntPtr.Zero) return 0;
-        // HSteamPipe == HSteamUser for the global accessor pipe
-        return SteamNative.User_GetHSteamUser(userPtr);
-    }
+        => SteamNative.SteamAPI_GetHSteamPipe();
 
     /// <inheritdoc/>
     public ulong GetLocalSteamId()

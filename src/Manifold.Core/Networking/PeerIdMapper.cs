@@ -31,6 +31,10 @@ internal sealed class PeerIdMapper
                 $"SteamId {steamId} is already registered as Godot peer {_steamToGodot[steamId]}. " +
                 "Call Remove() before re-registering.");
 
+        // Godot peer IDs must be >= 2 (1 is the server). Wrap if we overflow.
+        // In practice this should never happen in a game session, but guards against subtle corruption.
+        if (_nextId < 2) _nextId = 2;
+
         int id = _nextId++;
         _steamToGodot[steamId]   = id;
         _godotToSteam[id]        = steamId;

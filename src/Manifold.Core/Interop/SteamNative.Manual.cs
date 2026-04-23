@@ -10,6 +10,17 @@ namespace Manifold.Core.Interop;
 
 internal static partial class SteamNative
 {
+    // ── SteamAPI_GetHSteamPipe — manually implemented (absent from steam_api.json) ──
+
+    /// <summary>
+    /// Returns the global <c>HSteamPipe</c> for the current Steam user session.
+    /// Required for <c>SteamAPI_ManualDispatch_*</c> calls.
+    /// Defined in SDK <c>steam_api_internal.h</c>; absent from <c>steam_api.json</c> so not auto-generated.
+    /// </summary>
+    [DllImport(LibName, EntryPoint = "SteamAPI_GetHSteamPipe",
+               CallingConvention = CallingConvention.Cdecl)]
+    internal static extern uint SteamAPI_GetHSteamPipe();
+
     // ── ConnectP2P — manually implemented (ManifoldGen skipped: SteamNetworkingIdentity& param) ──
 
     // Identity type constant for the SteamID64 variant.

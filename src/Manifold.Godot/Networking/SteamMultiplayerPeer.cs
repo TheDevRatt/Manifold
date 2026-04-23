@@ -205,7 +205,7 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension, ISteamPeer
     public override void _SetTargetPeer(int pPeer) => _targetPeer = pPeer;
 
     /// <inheritdoc/>
-    public override int _GetMaxPacketSize() => 1_048_576;
+    public override int _GetMaxPacketSize() => 524_288; // Steam ISteamNetworkingSockets reliable message cap (512 KB)
 
     /// <inheritdoc/>
     public override int _GetAvailablePacketCount() => _incoming.Count;
@@ -341,7 +341,9 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension, ISteamPeer
                         }
 
                         var ack = HandshakeProtocol.BuildAck();
-                        _core.SendTo(_core.ServerConnection, ack, k_nSteamNetworkingSend_Reliable);
+                        int ackResult = _core.SendTo(_core.ServerConnection, ack, k_nSteamNetworkingSend_Reliable);
+                        if (ackResult != 1)
+                            GD.PushWarning($"[Manifold] HandshakeAck send returned EResult {ackResult}.");
                         _state = PeerState.Connected;
                         EmitSignal(MultiplayerPeer.SignalName.PeerConnected, 1L);
                     }
@@ -379,7 +381,14 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension, ISteamPeer
     /// <inheritdoc/>
     public override Error _PutPacketScript(byte[] pBuffer)
     {
-        if (_state != PeerState.Connected) return Error.Unavailable;
+        if (_state != PeerState.Connected && _state != PeerState.Disconnecting)
+            return Error.Unavailable;
+
+        if (pBuffer.Length > _GetMaxPacketSize())
+        {
+            GD.PushError($"[Manifold] _PutPacketScript: packet size {pBuffer.Length} exceeds cap {_GetMaxPacketSize()}. Packet dropped.");
+            return Error.InvalidParameter;
+        }
 
         int sendFlags = ComputeSendFlags();
 
@@ -397,7 +406,11 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension, ISteamPeer
                 foreach (var (conn, godotId) in _peerMapper.GetAllConnections())
                 {
                     if (_targetPeer == 0 || godotId != -_targetPeer)
-                        _core.SendTo(conn, outBuf, sendFlags);
+                    {
+                        int result = _core.SendTo(conn, outBuf, sendFlags);
+                        if (result != 1) // k_EResultOK
+                            GD.PushWarning($"[Manifold] SendTo peer {godotId} returned EResult {result}.");
+                    }
                 }
             }
             else
@@ -406,14 +419,20 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension, ISteamPeer
                 // Broadcast (0) and all-except(-n != 1) both go to the server.
                 // _peerMapper is empty on clients — never iterate it for sends.
                 if (_targetPeer == 0 || -_targetPeer != 1)
-                    _core.SendTo(_core.ServerConnection, outBuf, sendFlags);
+                {
+                    int result = _core.SendTo(_core.ServerConnection, outBuf, sendFlags);
+                    if (result != 1) // k_EResultOK
+                        GD.PushWarning($"[Manifold] SendTo server returned EResult {result}.");
+                }
             }
         }
         else
         {
             uint conn = GetConnectionForPeer(_targetPeer);
             if (conn == 0) return Error.InvalidParameter;
-            _core.SendTo(conn, outBuf, sendFlags);
+            int result = _core.SendTo(conn, outBuf, sendFlags);
+            if (result != 1) // k_EResultOK
+                GD.PushWarning($"[Manifold] SendTo peer {_targetPeer} returned EResult {result}.");
         }
 
         return Error.Ok;
@@ -555,13 +574,14 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension, ISteamPeer
     }
 
     /// <summary>Handles a remote-initiated disconnect for the given connection handle.</summary>
-    private void HandleRemoteDisconnect(uint connection)
+    private void HandleRemoteDisconnect(uint connection, bool wasLocal = false)
     {
         if (_peerMapper.TryGetGodotId(connection, out int godotId))
         {
             _peerMapper.Remove(godotId);
             EmitSignal(MultiplayerPeer.SignalName.PeerDisconnected, (long)godotId);
-            EmitSignalPeerDisconnectedWithReason(godotId, 0, "Remote disconnect", wasLocal: false);
+            string reason = wasLocal ? "Local connection problem" : "Remote disconnect";
+            EmitSignalPeerDisconnectedWithReason(godotId, 0, reason, wasLocal: wasLocal);
         }
         else if (!_isServer)
         {
@@ -575,9 +595,10 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension, ISteamPeer
 
             _state = PeerState.Disconnected;
             _uniqueId = 0;
-            LastDisconnectInfo = new DisconnectInfo { Code = 0, Reason = "Server disconnected", WasLocalClose = false };
+            string serverReason = wasLocal ? "Local connection problem" : "Server disconnected";
+            LastDisconnectInfo = new DisconnectInfo { Code = 0, Reason = serverReason, WasLocalClose = wasLocal };
             EmitSignal(MultiplayerPeer.SignalName.PeerDisconnected, 1L);   // triggers Godot's server_disconnected
-            EmitSignalPeerDisconnectedWithReason(1, 0, "Server disconnected", wasLocal: false);
+            EmitSignalPeerDisconnectedWithReason(1, 0, serverReason, wasLocal: wasLocal);
         }
     }
 
@@ -631,7 +652,9 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension, ISteamPeer
 
         // Send handshake with assigned peer ID
         byte[] handshake = HandshakeProtocol.BuildHandshake(godotId);
-        _core.SendTo(connection, handshake, sendFlags: k_nSteamNetworkingSend_Reliable);
+        int hsResult = _core.SendTo(connection, handshake, sendFlags: k_nSteamNetworkingSend_Reliable);
+        if (hsResult != 1)
+            GD.PushWarning($"[Manifold] Handshake send to connection {connection} returned EResult {hsResult}. Client may timeout.");
 
         // Start 5-second handshake timeout
         _pendingHandshakes[connection] = new HandshakeState();
@@ -648,21 +671,28 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension, ISteamPeer
                 _state = PeerState.Authenticating;
                 // Handshake packet will come from server in _Poll
             }
-            else if (newState == k_ESteamNetworkingConnectionState_ClosedByPeer
-                  || newState == k_ESteamNetworkingConnectionState_ProblemDetectedLocally)
+            else if (newState == k_ESteamNetworkingConnectionState_ClosedByPeer)
             {
-                HandleRemoteDisconnect(connection);
+                HandleRemoteDisconnect(connection, wasLocal: false);
+            }
+            else if (newState == k_ESteamNetworkingConnectionState_ProblemDetectedLocally)
+            {
+                HandleRemoteDisconnect(connection, wasLocal: true);
             }
         }
         else
         {
             // Host: handle peer disconnects from connection status changes
-            if (newState == k_ESteamNetworkingConnectionState_ClosedByPeer
-             || newState == k_ESteamNetworkingConnectionState_ProblemDetectedLocally)
+            if (newState == k_ESteamNetworkingConnectionState_ClosedByPeer)
             {
                 // Remove any pending handshake
                 _pendingHandshakes.Remove(connection);
-                HandleRemoteDisconnect(connection);
+                HandleRemoteDisconnect(connection, wasLocal: false);
+            }
+            else if (newState == k_ESteamNetworkingConnectionState_ProblemDetectedLocally)
+            {
+                _pendingHandshakes.Remove(connection);
+                HandleRemoteDisconnect(connection, wasLocal: true);
             }
         }
     }

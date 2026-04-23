@@ -67,7 +67,8 @@ public sealed class CallResultAwaiter<T> : IDisposable where T : unmanaged
     private readonly CancellationTokenRegistration _ctReg;
     private readonly CancellationTokenSource? _timeoutCts;
     private readonly Action<Exception> _canceller;
-    private int _settled; // 0 = pending, 1 = settled (CAS guard)
+    private int _settled;  // 0 = pending, 1 = settled (CAS guard)
+    private int _disposed; // 0 = live,    1 = disposed (CAS guard; separate from _settled)
 
     /// <summary>
     /// Creates an awaiter and registers it with the static <see cref="CallbackDispatcher"/>.
@@ -99,6 +100,10 @@ public sealed class CallResultAwaiter<T> : IDisposable where T : unmanaged
             expectedCallbackId: expectedCallbackId,
             dataSize: dataSize);
 
+        // Global shutdown canceller — set before timeout registration so lambda capture is never null
+        _canceller = ex => TrySettle(() => _tcs.TrySetException(ex));
+        CallResultAwaiter.RegisterCanceller(_canceller);
+
         // Timeout: default 30s
         var effectiveTimeout = timeout ?? TimeSpan.FromSeconds(30);
         _timeoutCts = new CancellationTokenSource(effectiveTimeout);
@@ -106,9 +111,12 @@ public sealed class CallResultAwaiter<T> : IDisposable where T : unmanaged
         var capturedTimeout = effectiveTimeout;
         var capturedHandle  = callHandle;
         _timeoutCts.Token.Register(() =>
-            TrySettle(() =>
-                _tcs.TrySetException(
-                    new SteamCallResultTimeoutException(capturedHandle, capturedTimeout))),
+        {
+            if (Interlocked.CompareExchange(ref _disposed, 1, 0) != 0) return; // already disposed
+            CallbackDispatcher.CancelCallResult(capturedHandle);
+            CallResultAwaiter.UnregisterCanceller(_canceller);
+            _tcs.TrySetException(new SteamCallResultTimeoutException(capturedHandle, capturedTimeout));
+        },
             useSynchronizationContext: false);
 
         // External cancellation → TaskCanceledException
@@ -118,10 +126,6 @@ public sealed class CallResultAwaiter<T> : IDisposable where T : unmanaged
                 TrySettle(() => _tcs.TrySetCanceled()),
                 useSynchronizationContext: false);
         }
-
-        // Global shutdown canceller
-        _canceller = ex => TrySettle(() => _tcs.TrySetException(ex));
-        CallResultAwaiter.RegisterCanceller(_canceller);
     }
 
     /// <summary>
@@ -133,9 +137,11 @@ public sealed class CallResultAwaiter<T> : IDisposable where T : unmanaged
     /// <inheritdoc/>
     public void Dispose()
     {
+        if (Interlocked.CompareExchange(ref _disposed, 1, 0) != 0) return;
         CallResultAwaiter.UnregisterCanceller(_canceller);
         CallbackDispatcher.CancelCallResult(_callHandle);
         _ctReg.Dispose();
+        _timeoutCts?.Cancel();
         _timeoutCts?.Dispose();
     }
 
