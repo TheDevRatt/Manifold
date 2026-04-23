@@ -278,15 +278,260 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension
         CancellationToken cancellationToken = default)
         => Task.FromResult(Error.Unavailable); // cancellationToken intentionally unused until Phase 3
 
-    // ── Core event handlers (Tasks 13-14 will fill these in) ─────────────────
+    // ── Persistent receive buffer ─────────────────────────────────────────────
+
+    /// <summary>
+    /// Persistent receive buffer — allocated once on first use, reused every frame.
+    /// Godot holds a raw pointer after <see cref="_GetPacket"/> returns, so the buffer
+    /// must stay alive for the lifetime of the peer.
+    /// See: docs/decisions/godot-get-packet-memory-contract.md (Task 6).
+    /// </summary>
+    private byte[]? _packetBuffer;
+
+    // ── Steam send-flag constants (MASTER_DESIGN §8.2) ────────────────────────
+
+    private const int k_nSteamNetworkingSend_Unreliable        = 0;
+    private const int k_nSteamNetworkingSend_NoDelay           = 4;
+    private const int k_nSteamNetworkingSend_NoNagle           = 1;
+    private const int k_nSteamNetworkingSend_Reliable          = 8;
+    private const int k_nSteamNetworkingSend_UnreliableNoDelay = 5; // NoDelay | NoNagle
+
+    // ── Handshake tracking (Task 14 will fully populate) ─────────────────────
+
+    private readonly System.Collections.Generic.Dictionary<uint, HandshakeState> _pendingHandshakes = new();
+
+    // ── Poll / send / receive / close ─────────────────────────────────────────
+
+    /// <inheritdoc/>
+    public override void _Poll()
+    {
+        if (_state is PeerState.Idle or PeerState.Disconnected) return;
+
+        var pending = new System.Collections.Generic.List<ReceivedPacket>();
+        _core.DrainMessages(pending);
+
+        foreach (var pkt in pending)
+        {
+            switch (pkt.Kind)
+            {
+                case PacketKind.Data:
+                    // Buffer stays alive — payload will be copied in _GetPacket into _packetBuffer
+                    _incoming.Enqueue(pkt);
+                    break;
+
+                case PacketKind.Handshake when !_isServer:
+                    // Client receives peer ID assignment from server
+                    int spanLen = pkt.Size > 0 ? pkt.Size : pkt.Buffer.Length;
+                    if (HandshakeProtocol.TryParseHandshake(pkt.Buffer.AsSpan(0, spanLen), out int peerId))
+                    {
+                        _uniqueId = peerId;
+                        var ack = HandshakeProtocol.BuildAck();
+                        _core.SendTo(_core.ServerConnection, ack, k_nSteamNetworkingSend_Reliable);
+                        _state = PeerState.Connected;
+                        EmitSignal(MultiplayerPeer.SignalName.PeerConnected, 1L);
+                    }
+                    System.Buffers.ArrayPool<byte>.Shared.Return(pkt.Buffer);
+                    break;
+
+                case PacketKind.HandshakeAck when _isServer:
+                    // Server side handled in Task 14 — just return buffer
+                    System.Buffers.ArrayPool<byte>.Shared.Return(pkt.Buffer);
+                    break;
+
+                case PacketKind.Disconnect:
+                    HandleRemoteDisconnect(pkt.Connection);
+                    System.Buffers.ArrayPool<byte>.Shared.Return(pkt.Buffer);
+                    break;
+
+                default:
+                    System.Buffers.ArrayPool<byte>.Shared.Return(pkt.Buffer);
+                    break;
+            }
+        }
+
+        CheckHandshakeTimeouts();
+    }
+
+    /// <inheritdoc/>
+    public override Error _PutPacketScript(byte[] pBuffer)
+    {
+        if (_state != PeerState.Connected) return Error.Unavailable;
+
+        int sendFlags = ComputeSendFlags();
+
+        // Build: 2-byte Manifold header + payload
+        int totalSize = PacketHeader.Size + pBuffer.Length;
+        byte[] outBuf = new byte[totalSize]; // TODO: optimize with ArrayPool for hot path
+        new PacketHeader(PacketKind.Data, (byte)_transferChannel).Encode(outBuf.AsSpan());
+        pBuffer.AsSpan().CopyTo(outBuf.AsSpan(PacketHeader.Size));
+
+        if (_targetPeer <= 0)
+        {
+            // 0 = broadcast; negative = all-except-one
+            foreach (var (conn, godotId) in _peerMapper.GetAllConnections())
+            {
+                if (_targetPeer == 0 || godotId != -_targetPeer)
+                    _core.SendTo(conn, outBuf, sendFlags);
+            }
+        }
+        else
+        {
+            uint conn = GetConnectionForPeer(_targetPeer);
+            if (conn == 0) return Error.InvalidParameter;
+            _core.SendTo(conn, outBuf, sendFlags);
+        }
+
+        return Error.Ok;
+    }
+
+    /// <inheritdoc/>
+    public override byte[] _GetPacketScript()
+    {
+        if (_incoming.Count == 0)
+            return System.Array.Empty<byte>();
+
+        var pkt = _incoming.Dequeue();
+        _currentPacket = pkt;
+
+        // Note: Task 6 (docs/decisions/godot-get-packet-memory-contract.md) warns that Godot
+        // holds a raw pointer after _GetPacket returns — that concern applies to the GDExtension
+        // C++ virtual, not this C# _GetPacketScript() override, where Godot holds a managed GC
+        // reference to the returned byte[]. We allocate exactly the right size per packet here;
+        // _packetBuffer is kept as a scratch buffer for future optimization (e.g. pinned buffer).
+        _packetBuffer ??= new byte[_GetMaxPacketSize()];
+
+        int payloadSize = pkt.Size;
+        var result = new byte[payloadSize];
+        if (payloadSize > 0)
+            pkt.Buffer.AsSpan(0, payloadSize).CopyTo(result);
+
+        // Return the rented ArrayPool buffer — result is now the independent copy Godot will hold
+        System.Buffers.ArrayPool<byte>.Shared.Return(pkt.Buffer);
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public override int _GetPacketPeer()
+    {
+        if (_peerMapper.TryGetGodotId(_currentPacket.Connection, out int id))
+            return id;
+        return 0;
+    }
+
+    /// <inheritdoc/>
+    public override int _GetPacketChannel() => _currentPacket.Channel;
+
+    /// <inheritdoc/>
+    public override MultiplayerPeer.TransferModeEnum _GetPacketMode()
+        => _currentPacket.Kind == PacketKind.Data ? _transferMode : MultiplayerPeer.TransferModeEnum.Reliable;
+
+    /// <inheritdoc/>
+    public override void _Close()
+    {
+        if (_state is PeerState.Idle or PeerState.Disconnected) return;
+
+        _state = PeerState.Disconnecting;
+
+        _core.Close();
+        _peerMapper.Clear();
+        _pendingHandshakes.Clear();
+
+        // Drain and discard any queued incoming packets
+        while (_incoming.Count > 0)
+            System.Buffers.ArrayPool<byte>.Shared.Return(_incoming.Dequeue().Buffer);
+
+        _state    = PeerState.Disconnected;
+        _uniqueId = 0;
+        _isServer = false;
+    }
+
+    /// <inheritdoc/>
+    public override void _DisconnectPeer(int pPeer, bool pForce)
+    {
+        if (!_isServer) return; // only the server can disconnect individual peers
+
+        if (!_peerMapper.TryGetConnection(pPeer, out uint conn)) return;
+
+        _core.CloseConnection(conn, reason: 0, debugMsg: null, linger: !pForce);
+        _peerMapper.Remove(pPeer);
+        EmitSignal(MultiplayerPeer.SignalName.PeerDisconnected, (long)pPeer);
+        EmitSignalPeerDisconnectedWithReason(pPeer, 0, "Disconnected by server", wasLocal: true);
+    }
+
+    // ── Internal helpers ──────────────────────────────────────────────────────
+
+    /// <summary>Computes the Steam send flags for the current transfer mode and options.</summary>
+    private int ComputeSendFlags()
+    {
+        int flags = _transferMode switch
+        {
+            MultiplayerPeer.TransferModeEnum.Reliable          => k_nSteamNetworkingSend_Reliable,
+            MultiplayerPeer.TransferModeEnum.UnreliableOrdered => k_nSteamNetworkingSend_Unreliable, // degrades (one-time warning fires in _SetTransferMode)
+            _                                                  => k_nSteamNetworkingSend_UnreliableNoDelay,
+        };
+        if (NoNagle) flags |= k_nSteamNetworkingSend_NoNagle;
+        if (NoDelay) flags |= k_nSteamNetworkingSend_NoDelay;
+        return flags;
+    }
+
+    /// <summary>
+    /// Returns the connection handle for the given Godot peer ID.
+    /// For clients, peer ID 1 maps to the server connection.
+    /// Returns 0 if the peer is not found.
+    /// </summary>
+    private uint GetConnectionForPeer(int godotId)
+    {
+        if (_isServer)
+            return _peerMapper.TryGetConnection(godotId, out uint conn) ? conn : 0u;
+
+        // Client: the only remote peer is the server (always ID 1)
+        return godotId == 1 ? _core.ServerConnection : 0u;
+    }
+
+    /// <summary>Emits the extended peer-disconnected-with-reason signal and records disconnect info.</summary>
+    private void EmitSignalPeerDisconnectedWithReason(int peerId, int code, string reason, bool wasLocal)
+    {
+        LastDisconnectInfo = new DisconnectInfo { Code = code, Reason = reason, WasLocalClose = wasLocal };
+        // Signal name is the delegate name stripped of "EventHandler" suffix (Godot convention)
+        EmitSignal("PeerDisconnectedWithReason", peerId, code, reason, wasLocal);
+    }
+
+    /// <summary>Handles a remote-initiated disconnect for the given connection handle.</summary>
+    private void HandleRemoteDisconnect(uint connection)
+    {
+        if (_peerMapper.TryGetGodotId(connection, out int godotId))
+        {
+            _peerMapper.Remove(godotId);
+            EmitSignal(MultiplayerPeer.SignalName.PeerDisconnected, (long)godotId);
+            EmitSignalPeerDisconnectedWithReason(godotId, 0, "Remote disconnect", wasLocal: false);
+        }
+        else if (!_isServer)
+        {
+            // Client disconnected from server
+            _state = PeerState.Disconnected;
+            LastDisconnectInfo = new DisconnectInfo { Code = 0, Reason = "Server disconnected", WasLocalClose = false };
+        }
+    }
+
+    /// <summary>
+    /// Checks for handshake timeouts and closes stalled connections.
+    /// Task 14 will implement the full logic; this is a stub.
+    /// </summary>
+    private void CheckHandshakeTimeouts()
+    {
+        // Task 14 will implement handshake timeout checking
+    }
+
+    // ── Core event handlers ───────────────────────────────────────────────────
 
     private void OnIncomingConnection(uint connection)
     {
-        // Task 14: handle handshake initiation
+        // Task 14: handle handshake initiation (accept, register, send Handshake packet)
     }
 
     private void OnConnectionStatusChanged(uint connection, int newState, int oldState, string debugMsg)
     {
-        // Task 13: handle state transitions
+        // Task 14: handle state transitions (connecting → connected, closed-by-peer, etc.)
     }
 }

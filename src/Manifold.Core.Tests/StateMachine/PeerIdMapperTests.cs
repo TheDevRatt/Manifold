@@ -225,6 +225,108 @@ public class PeerIdMapperTests
         Assert.Equal(id2, found);
     }
 
+    // ── GetConnection / TryGetConnection / GetAllConnections ─────────────────
+
+    [Fact]
+    public void GetConnection_ReturnsRegisteredConnection()
+    {
+        var mapper  = new PeerIdMapper();
+        uint conn   = 1100u;
+        int godotId = mapper.Register(MakeSteamId(76561198000001001UL), conn);
+
+        Assert.Equal(conn, mapper.GetConnection(godotId));
+    }
+
+    [Fact]
+    public void GetConnection_Throws_ForUnknownGodotId()
+    {
+        var mapper = new PeerIdMapper();
+        Assert.Throws<KeyNotFoundException>(() => mapper.GetConnection(9999));
+    }
+
+    [Fact]
+    public void TryGetConnection_ReturnsTrue_WhenGodotIdIsRegistered()
+    {
+        var mapper  = new PeerIdMapper();
+        uint conn   = 1200u;
+        int godotId = mapper.Register(MakeSteamId(76561198000001002UL), conn);
+
+        bool found = mapper.TryGetConnection(godotId, out uint actual);
+
+        Assert.True(found);
+        Assert.Equal(conn, actual);
+    }
+
+    [Fact]
+    public void TryGetConnection_ReturnsFalse_WhenGodotIdIsUnknown()
+    {
+        var mapper = new PeerIdMapper();
+
+        bool found = mapper.TryGetConnection(9999, out uint conn);
+
+        Assert.False(found);
+        Assert.Equal(0u, conn);
+    }
+
+    [Fact]
+    public void TryGetConnection_ReturnsFalse_AfterRemove()
+    {
+        var mapper  = new PeerIdMapper();
+        uint conn   = 1300u;
+        int godotId = mapper.Register(MakeSteamId(76561198000001003UL), conn);
+
+        mapper.Remove(godotId);
+
+        Assert.False(mapper.TryGetConnection(godotId, out _));
+    }
+
+    [Fact]
+    public void GetAllConnections_ReturnsAllRegisteredPairs()
+    {
+        var mapper = new PeerIdMapper();
+        int id1 = mapper.Register(MakeSteamId(76561198000001004UL), 1401u);
+        int id2 = mapper.Register(MakeSteamId(76561198000001005UL), 1402u);
+        int id3 = mapper.Register(MakeSteamId(76561198000001006UL), 1403u);
+
+        var all = new System.Collections.Generic.Dictionary<uint, int>();
+        foreach (var (c, g) in mapper.GetAllConnections())
+            all[c] = g;
+
+        Assert.Equal(3, all.Count);
+        Assert.Equal(id1, all[1401u]);
+        Assert.Equal(id2, all[1402u]);
+        Assert.Equal(id3, all[1403u]);
+    }
+
+    [Fact]
+    public void GetAllConnections_ReturnsEmpty_WhenNoRegistrations()
+    {
+        var mapper = new PeerIdMapper();
+
+        int count = 0;
+        foreach (var _ in mapper.GetAllConnections()) count++;
+
+        Assert.Equal(0, count);
+    }
+
+    [Fact]
+    public void GetAllConnections_ExcludesRemovedPeers()
+    {
+        var mapper = new PeerIdMapper();
+        int id1 = mapper.Register(MakeSteamId(76561198000001007UL), 1501u);
+        int id2 = mapper.Register(MakeSteamId(76561198000001008UL), 1502u);
+
+        mapper.Remove(id1);
+
+        var all = new System.Collections.Generic.Dictionary<uint, int>();
+        foreach (var (c, g) in mapper.GetAllConnections())
+            all[c] = g;
+
+        Assert.Single(all);
+        Assert.False(all.ContainsKey(1501u));
+        Assert.Equal(id2, all[1502u]);
+    }
+
     [Fact]
     public void Register_ConnectionHandleReuse_OverwritesPreviousMapping()
     {

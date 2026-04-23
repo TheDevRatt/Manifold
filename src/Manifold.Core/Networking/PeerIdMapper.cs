@@ -75,6 +75,22 @@ internal sealed class PeerIdMapper
     internal bool TryGetGodotId(uint connection, out int godotId)
         => _connToGodot.TryGetValue(connection, out godotId);
 
+    /// <summary>Returns the connection handle for the given Godot peer ID.</summary>
+    /// <exception cref="KeyNotFoundException">If the Godot ID is not registered.</exception>
+    internal uint GetConnection(int godotId) => _godotToConn[godotId];
+
+    /// <summary>Attempts to get the connection handle for the given Godot peer ID.</summary>
+    /// <returns><c>true</c> if found; <c>false</c> otherwise.</returns>
+    internal bool TryGetConnection(int godotId, out uint connection)
+        => _godotToConn.TryGetValue(godotId, out connection);
+
+    /// <summary>Enumerates all registered (connection, godotId) pairs.</summary>
+    internal IEnumerable<(uint Connection, int GodotId)> GetAllConnections()
+    {
+        foreach (var kv in _connToGodot)
+            yield return (kv.Key, kv.Value);
+    }
+
     /// <summary>
     /// Removes all mappings and resets the next peer ID to 2.
     /// Called when a <c>SteamMultiplayerPeer</c> closes.
