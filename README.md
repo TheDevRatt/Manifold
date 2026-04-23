@@ -9,7 +9,7 @@ Multiplayer.MultiplayerPeer = peer;
 // @rpc just works from here.
 ```
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![.NET 8](https://img.shields.io/badge/.NET-8-purple)](https://dotnet.microsoft.com) [![Steamworks SDK](https://img.shields.io/badge/Steamworks%20SDK-1.64-informational)](https://partner.steamgames.com) [![Tests](https://img.shields.io/badge/tests-201%20passing-brightgreen)]() [![Status](https://img.shields.io/badge/status-WIP-orange)]()
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![.NET 8](https://img.shields.io/badge/.NET-8-purple)](https://dotnet.microsoft.com) [![Steamworks SDK](https://img.shields.io/badge/Steamworks%20SDK-1.64-informational)](https://partner.steamgames.com) [![Tests](https://img.shields.io/badge/tests-198%20passing-brightgreen)]() [![Status](https://img.shields.io/badge/status-WIP-orange)]()
 
 ---
 
