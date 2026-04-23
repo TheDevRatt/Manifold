@@ -206,7 +206,7 @@ public partial class SteamMultiplayerPeer : MultiplayerPeerExtension, ISteamPeer
     public override void _SetTargetPeer(int pPeer) => _targetPeer = pPeer;
 
     /// <inheritdoc/>
-    public override int _GetMaxPacketSize() => 1_048_576; // Steam ISteamNetworkingSockets reliable message cap (MASTER_DESIGN §8.4)
+    public override int _GetMaxPacketSize() => 524_288; // k_cbMaxSteamNetworkingSocketsMessageSizeSend = 512*1024 (steamnetworkingtypes.h)
 
     /// <inheritdoc/>
     public override int _GetAvailablePacketCount() => _incoming.Count;
