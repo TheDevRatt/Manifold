@@ -19,11 +19,13 @@
   <!-- GodotSharp reference — adjust path if Godot install location differs -->
   <ItemGroup>
     <Reference Include="GodotSharp">
-      <HintPath>C:\Users\Matthew\Documents\Godot_v4.6.2-stable_mono\GodotSharp\Api\net8.0\GodotSharp.dll</HintPath>
+      <HintPath Condition="$([MSBuild]::IsOSPlatform('Windows'))">C:\Users\Matthew\Documents\Godot_v4.6.2-stable_mono\GodotSharp\Api\Release\GodotSharp.dll</HintPath>
+      <HintPath Condition="$([MSBuild]::IsOSPlatform('Linux'))">/mnt/c/Users/Matthew/Documents/Godot_v4.6.2-stable_mono/GodotSharp/Api/Release/GodotSharp.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="GodotSharpEditor" Condition="'$(Configuration)'=='Debug'">
-      <HintPath>C:\Users\Matthew\Documents\Godot_v4.6.2-stable_mono\GodotSharp\Api\net8.0\GodotSharpEditor.dll</HintPath>
+      <HintPath Condition="$([MSBuild]::IsOSPlatform('Windows'))">C:\Users\Matthew\Documents\Godot_v4.6.2-stable_mono\GodotSharp\Api\net8.0\GodotSharpEditor.dll</HintPath>
+      <HintPath Condition="$([MSBuild]::IsOSPlatform('Linux'))">/mnt/c/Users/Matthew/Documents/Godot_v4.6.2-stable_mono/GodotSharp/Api/net8.0/GodotSharpEditor.dll</HintPath>
       <Private>false</Private>
     </Reference>
   </ItemGroup>
