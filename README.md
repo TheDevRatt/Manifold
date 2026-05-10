@@ -68,15 +68,15 @@ Drop the Steamworks SDK native libraries into your project's output directory. A
 ### Phase 1: Foundation ✅
 
 - [x] Source generator (ManifoldGen): reads `steam_api.json`, emits full P/Invoke layer
-- [x] `SteamLifecycle`: init/shutdown, background callback pump, fatal error handling
-- [x] `CallbackDispatcher`: type-safe subscriptions with disposable tokens
+- [x] `SteamLifecycle`: init/shutdown, manual per-frame callback pump, fatal error handling
+- [x] `CallbackDispatcher`: type-safe subscriptions with disposable tokens and manual-dispatch routing
 - [x] `CallResultAwaiter<T>`: async Steam call results with cancellation and timeout
 - [x] Native struct size validator: catches packing bugs against real SDK headers at build time
 - [x] 80 contract tests
 
-### Phase 2: Networking Core *(implementation complete — pending live Steam validation)*
+### Phase 2: Networking Core *(implementation complete - pending live Steam validation)*
 
-> **Status:** The networking primitives are fully implemented and all known correctness bugs have been fixed. The production Steam backend is not yet wired into `SteamMultiplayerPeer`'s public constructor — that happens in Phase 3 when `SteamLifecycle` is integrated. The manual E2E loopback test (requires a live Steam session) is the remaining gate.
+> **Status:** The networking primitives are fully implemented and all known correctness bugs have been fixed. The production Steam backend is not yet wired into `SteamMultiplayerPeer`'s public constructor - that happens in Phase 3 when `SteamLifecycle` is integrated. The manual E2E loopback test (requires a live Steam session) is the remaining gate.
 
 - [x] `PacketHeader` (2-byte encode/decode, version + kind + channel)
 - [x] `HandshakeProtocol` (server→client peer ID assignment, 5 s monotonic timeout via `TickCount64`)
@@ -88,23 +88,32 @@ Drop the Steamworks SDK native libraries into your project's output directory. A
 - [x] `LiveSteamInit.GetHSteamPipe` uses correct `SteamAPI_GetHSteamPipe()` (not `HSteamUser`)
 - [x] `CallResultAwaiter` idempotent/thread-safe `Dispose()`
 - [x] `ProblemDetectedLocally` correctly reported as `WasLocalClose = true`
-- [x] Unit + integration tests (201 passing via `FakeSteamBackend`)
+- [x] Unit + integration tests (205 passing via `FakeSteamBackend`)
 - [x] `PacketHeader.TryDecode` rejects unknown kinds (0x4–0xF) and non-zero version
 - [x] `SteamNetworkingCore.Close` closes accepted connections before `CloseListenSocket`
 - [x] `SteamPeerRegistry` late-registration guard (shutting-down flag)
 - [x] `CallbackDispatcher.CancelAll` no longer double-invokes raw handlers with `IntPtr.Zero`
-- [x] `CallbackDispatcher.Tick` reentrancy guard — exits cleanly if `Dispose` called from a handler
-- [ ] End-to-end loopback: two peers connect via live Steam P2P — manual gate
+- [x] `CallbackDispatcher.Tick` reentrancy guard - exits cleanly if `Dispose` called from a handler
+- [ ] End-to-end loopback: two peers connect via live Steam P2P - manual gate
 
 > **Known gaps:** `Manifold.Godot.Tests` (GdUnit4 headless test suite, §10 category 5) does not yet exist.
 > The Godot integration layer (`SteamMultiplayerPeer`, `SteamManager`, `[Signal]` wiring) is verified only
 > via `FakeSteamBackend` unit tests in `Manifold.Core.Tests`. GdUnit4 test setup is a Phase 3 task
 > requiring a Godot headless build in CI.
 
-### Phase 3: Packaging & CI
+### Phase 3: API Surface
+
+- [ ] `LiveSteamNetworkingBackend` and production `SteamMultiplayerPeer()` constructor wiring
+- [ ] `SteamMatchmaking` + `SteamMatchmakingNode`
+- [ ] `HostWithLobbyAsync` / `JoinLobbyAsync`
+- [ ] `SteamManager` autoload
+- [ ] `SteamSignalBridge`
+- [ ] `SteamUser`, `SteamFriends`, and `SteamUtils`
+
+### Phase 4: Packaging & CI
 
 - [ ] GitHub Actions: build, test, coverage on push
-- [ ] NuGet package (`Manifold.Core` standalone)
+- [ ] NuGet packages (`Manifold.Core` and `Manifold.Godot`)
 - [ ] Godot Asset Library submission (`Manifold.Godot`)
 - [ ] SDK update workflow (re-run ManifoldGen, validate sizes, publish)
 
@@ -118,4 +127,4 @@ Contributions are very welcome! Whether it's a bug report, a missing API, a ques
 
 ## License
 
-MIT — Copyright © Matthew Makary
+MIT - Copyright © Matthew Makary
